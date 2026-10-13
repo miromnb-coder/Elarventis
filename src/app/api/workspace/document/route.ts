@@ -1,12 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { currentUser, db, storage } from "@/lib/supabase/rest";
+import { currentUser, db, storage, canManage } from "@/lib/supabase/rest";
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export async function POST(request: NextRequest) {
   if (request.headers.get("origin") !== request.nextUrl.origin) return NextResponse.json({ error: "Virheellinen alkuperä" }, { status: 403 });
   const user = await currentUser(); if (!user) return NextResponse.json({ error: "Kirjautuminen vaaditaan" }, { status: 401 });
   const orgId = request.cookies.get("elarventis-org")?.value;
   if (!orgId || !uuid.test(orgId)) return NextResponse.json({ error: "Valitse työtila" }, { status: 400 });
+  if (!await canManage(orgId)) return NextResponse.json({ error: "Ei käyttöoikeutta" }, { status: 403 });
   const form = await request.formData().catch(() => null);
   const file = form?.get("file"); const versionId = form?.get("versionId");
   if (!(file instanceof File) || typeof versionId !== "string" || !uuid.test(versionId) || !file.name.toLowerCase().endsWith(".pdf") || file.size < 8 || file.size > 10_485_760) return NextResponse.json({ error: "Vain enintään 10 Mt PDF on sallittu" }, { status: 400 });

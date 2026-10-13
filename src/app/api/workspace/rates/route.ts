@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { currentUser, db, storage } from "@/lib/supabase/rest";
+import { currentUser, db, storage, canManage } from "@/lib/supabase/rest";
 import { parseRates, RateRow } from "@/lib/rates/parse";
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function error(message: string, status = 400) { return NextResponse.json({ error: message }, { status }); }
@@ -9,6 +9,7 @@ export async function POST(request: NextRequest) {
   const user = await currentUser(); if (!user) return error("Kirjautuminen vaaditaan", 401);
   const orgId = request.cookies.get("elarventis-org")?.value;
   if (!orgId || !uuid.test(orgId)) return error("Valitse työtila");
+  if (!await canManage(orgId)) return error("Ei käyttöoikeutta", 403);
   const input = await request.formData().catch(() => null);
   const file = input?.get("file"); const versionId = input?.get("versionId"); const rowsText = input?.get("rows");
   if (!(file instanceof File) || file.size > 10_485_760 || typeof versionId !== "string" || !uuid.test(versionId)) return error("Virheellinen tiedosto tai versio");

@@ -29,3 +29,10 @@ export async function storage(path: string, init?: RequestInit) {
   if (!token) throw new Error("Kirjautuminen vaaditaan");
   return fetch(baseUrl() + "/storage/v1/object/" + path, { ...init, cache: "no-store", headers: { apikey: publicKey(), Authorization: "Bearer " + token, ...(init?.headers || {}) } });
 }
+
+export async function canManage(orgId: string) {
+  try {
+    const rows = await db<{ role: string }[]>("memberships?select=role&org_id=eq." + orgId + "&status=eq.active&limit=1");
+    return rows.length > 0 && ["owner", "admin"].includes(rows[0].role);
+  } catch { return false; }
+}
