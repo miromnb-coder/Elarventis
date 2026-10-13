@@ -17,7 +17,7 @@ export async function storeDocument(input: { orgId: string; userId: string; kind
     retry: async id => { await db("rpc/retry_document", { method: "POST", body: JSON.stringify({ p_org: orgId, p_document: id }) }); },
     head: async path => (await storage(`authenticated/elarventis-documents/${path}`, { method: "HEAD" })).ok,
     upload: async path => {
-      const response = await storage(`elarventis-documents/${path}`, { method: "POST", headers: { "Content-Type": mime }, body: bytes });
+      const response = await storage(`elarventis-documents/${path}`, { method: "POST", headers: { "Content-Type": mime }, body: new Blob([new Uint8Array(bytes)], { type: mime }) });
       if (!response.ok) throw new Error(`Storage ${response.status}`);
     },
     finish: async id => { await db("rpc/finish_document", { method: "POST", body: JSON.stringify({ p_org: orgId, p_document: id }) }); },
