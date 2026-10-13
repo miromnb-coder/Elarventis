@@ -37,3 +37,12 @@ Suunnitelmat:
 - [Tyhjä asiakasvalidoinnin seurantamalli](docs/VALIDATION_TRACKER_TEMPLATE.csv)
 
 Huomautus: Supabase-projekti on valmisteltu Frankfurtin alueelle, mutta siihen ei ole tässä vaiheessa luotu sovelluksen tauluja. Asiakastietoja tai API-salaisuuksia ei saa tallentaa tähän julkiseen repositoryyn.
+
+
+## Vaiheiden 4–6 keskeneräinen toteutus
+
+Sovelluksen työtila löytyy reitiltä /app ja kirjautuminen reitiltä /kirjaudu. Toteutus ja tunnetut puutteet: [vaihe 4](docs/PHASE_04_IMPLEMENTATION.md), [vaihe 5](docs/PHASE_05_IMPLEMENTATION.md), [vaihe 6](docs/PHASE_06_IMPLEMENTATION.md).
+
+**Tärkeää:** Supabase-migraatio on valmisteltu mutta sitä ei ole ajettu Frankfurtin projektiin, koska varmuuskopioinnin palautusta ei ole todennettu. Sovellusta ei pidä käyttää oikeilla asiakasdokumenteilla. Luo .env.local mallista .env.example ja lisää paikallisesti aktiivinen publishable-avain. Älä tallenna avainta GitHubiin. Migraation, Auth-sähköpostin ja Storage-politiikkojen käyttöönotto sekä suorat eristystestit vaaditaan ennen käyttöä.
+
+Paikallinen parseritesti: node --experimental-strip-types tests/rates.test.mjs.
