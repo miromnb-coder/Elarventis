@@ -1,0 +1,30 @@
+"use client";
+
+import { useState } from "react";
+import { ArrowDownRight, BarChart3, CheckCircle2, ChevronRight, CircleAlert, FileText, LayoutDashboard, Search } from "lucide-react";
+
+type Invoice = { id: string; carrier: string; date: string; billed: number; agreed: number; status: "Poikkeama" | "Tarkistettu" | "Tarkastuksessa"; finding: string };
+const invoices: Invoice[] = [
+  { id: "KL-2048", carrier: "Kuljetus A", date: "12.5.2026", billed: 1840, agreed: 1690, status: "Poikkeama", finding: "Lisämaksu ylittää sopimushinnan" },
+  { id: "KL-2047", carrier: "Logistiikka B", date: "10.5.2026", billed: 980, agreed: 980, status: "Tarkistettu", finding: "Ei havaittua hintaeroa" },
+  { id: "KL-2046", carrier: "Kuljetus C", date: "8.5.2026", billed: 2420, agreed: 2305, status: "Poikkeama", finding: "Rahtihinnassa tarkistettava ero" },
+  { id: "KL-2045", carrier: "Logistiikka D", date: "6.5.2026", billed: 1360, agreed: 1360, status: "Tarkastuksessa", finding: "Tarkastus kesken" },
+];
+
+const euro = (value: number) => new Intl.NumberFormat("fi-FI", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(value);
+
+export function SoftwarePreview() {
+  const [selected, setSelected] = useState(invoices[0]);
+  const [query, setQuery] = useState("");
+  const filtered = invoices.filter(item => `${item.id} ${item.carrier} ${item.status}`.toLocaleLowerCase("fi").includes(query.toLocaleLowerCase("fi")));
+  return <div className="app-window" aria-label="Interaktiivinen ohjelmiston konseptiesikatselu">
+    <div className="app-topbar"><div className="app-brand"><span className="app-brand-mark">E</span><span>Elarventis <small>Konsepti</small></span></div><div className="app-top-meta"><span>ESIMERKKIAINEISTO</span><span className="avatar">EK</span></div></div>
+    <div className="app-body"><aside className="app-sidebar" aria-label="Esikatselun osiot"><span className="sidebar-label">TYÖTILA</span><div className="sidebar-item"><LayoutDashboard size={16} /> Yhteenveto</div><div className="sidebar-item active"><FileText size={16} /> Laskut <span>04</span></div><div className="sidebar-item"><CircleAlert size={16} /> Poikkeamat</div><div className="sidebar-item"><BarChart3 size={16} /> Raportit</div><div className="sidebar-foot"><span className="sidebar-foot-icon">✳</span><span>Selkeämpi tarkastus<br /><small>Suunnitteilla</small></span></div></aside>
+      <div className="app-main"><div className="app-titlebar"><div><span className="app-breadcrumb">Työtila / Kuljetuslaskut</span><h3>Kuljetuslaskut</h3><p>Esimerkki tarkastusten etenemisestä ja havainnoista.</p></div><div className="app-date">TOUKOKUU 2026 <ArrowDownRight size={15} /></div></div>
+        <div className="stat-grid"><div className="stat-card"><span className="stat-icon"><FileText size={17} /></span><span className="stat-label">Laskuja</span><strong>04</strong><small>Esimerkkiaineistossa</small></div><div className="stat-card"><span className="stat-icon peach"><CircleAlert size={17} /></span><span className="stat-label">Havaittuja poikkeamia</span><strong>02</strong><small>Tarkistettavana</small></div><div className="stat-card"><span className="stat-icon pale"><BarChart3 size={17} /></span><span className="stat-label">Mahdollinen hintaero</span><strong>265 €</strong><small>Esimerkkilaskuista</small></div></div>
+        <div className="app-panels"><div className="invoice-panel"><div className="panel-heading"><div><h4>Laskujen tarkastus</h4><p>Valitse lasku nähdäksesi vertailun.</p></div><span className="panel-count">4 LASKUA</span></div><label className="preview-search"><Search size={16} /><span className="sr-only">Hae laskua</span><input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Hae laskua tai kuljetusliikettä" /></label><div className="invoice-table-wrap"><table><thead><tr><th scope="col">LASKU</th><th scope="col">KULJETUSLIIKE</th><th scope="col">LASKUTETTU</th><th scope="col">TILA</th><th scope="col"><span className="sr-only">Avaa</span></th></tr></thead><tbody>{filtered.map(item => <tr key={item.id} className={selected.id === item.id ? "selected" : ""} onClick={() => setSelected(item)}><td><button type="button" onClick={() => setSelected(item)} aria-label={`Näytä lasku ${item.id}`}>{item.id}</button><small>{item.date}</small></td><td>{item.carrier}</td><td>{euro(item.billed)}</td><td><span className={`status status-${item.status === "Poikkeama" ? "alert" : item.status === "Tarkistettu" ? "ok" : "pending"}`}>{item.status}</span></td><td><ChevronRight size={16} /></td></tr>)}</tbody></table>{filtered.length === 0 && <p className="empty-search">Hakua vastaavia esimerkkilaskuja ei löytynyt.</p>}</div></div>
+          <div className="detail-panel"><div className="detail-heading"><span>TARKASTUKSEN YHTEENVETO</span><span className="detail-dots">•••</span></div><div className="detail-invoice"><div><small>VALITTU LASKU</small><h4>{selected.id}</h4><p>{selected.carrier} · {selected.date}</p></div><span className="detail-doc"><FileText size={24} strokeWidth={1.4} /></span></div><div className="detail-progress"><div><span>Tarkastuksen eteneminen</span><strong>{selected.status === "Tarkastuksessa" ? "60 %" : "100 %"}</strong></div><div className="progress-track"><span style={{ width: selected.status === "Tarkastuksessa" ? "60%" : "100%" }} /></div></div><div className="price-compare"><p>HINTAVERTAILU</p><div><span>Laskutettu hinta</span><strong>{euro(selected.billed)}</strong></div><div><span>Sovittu hinta</span><strong>{euro(selected.agreed)}</strong></div><div className="difference"><span>Mahdollinen ero</span><strong>{euro(Math.max(selected.billed - selected.agreed, 0))}</strong></div></div><div className="finding"><span className={selected.status === "Tarkistettu" ? "finding-ok" : ""}>{selected.status === "Tarkistettu" ? <CheckCircle2 size={17} /> : <CircleAlert size={17} />}</span><div><strong>{selected.status === "Tarkastuksessa" ? "Tarkastus kesken" : selected.status === "Tarkistettu" ? "Ei poikkeamaa" : "Tarkistettava havainto"}</strong><p>{selected.finding}</p></div></div></div></div>
+      </div>
+    </div>
+  </div>;
+}
