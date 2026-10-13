@@ -25,7 +25,7 @@ npm run lint
 npm run build
 ```
 
-Viimeisin todellinen tulos ja suorittamatta jääneet testit: [vaiheiden 5–9 QA](docs/PHASE_05_09_FINAL_QA.md). Vuoden 2026-10-13 työtilassa 24 synteettistä moduulitestiä voitiin suorittaa. Typecheck, lint, build, PostgreSQL-migraatio, palautus, RLS, Storage ja E2E ovat avoimia.
+Viimeisin todellinen tulos ja suorittamatta jääneet testit: [vaiheiden 5–9 QA](docs/PHASE_05_09_FINAL_QA.md). Vuoden 2026-10-13 työtilassa 24 synteettistä moduulitestiä voitiin suorittaa. Vercelin tuotantobuild ja sen tyyppitarkistus läpäisivät; erillinen ESLint, PostgreSQL-migraatio, palautus, RLS, Storage ja E2E ovat avoimia. [Tietokannan aktivoinnin portit](docs/DATABASE_ACTIVATION.md).
 
 ## Tuetut rajatut muodot
 

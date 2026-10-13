@@ -12,18 +12,22 @@
 
 ## Todelliset tarkistukset
 
-- GitHub `main` lähtöcommit: `43d1c7aca5ec14ec96a1d26b87620d013142140f`. Repo rekonstruoitiin GitHub-connectorin tiedostoista, koska execution-ympäristön proxy esti `git clone`-komennon. Muutokset ovat paikallisessa `/workspace/Elarventis`-hakemistossa; GitHubiin ei ole tehty commitia.
-- Vercel `elarventis` on liitetty tähän GitHub-repoon ja viimeisin julkaisu oli `production`. Main-pushia ei tehty, jotta automaattinen julkaisu ei ohita hyväksyntää.
+- GitHub `main` lähtöcommit: `43d1c7aca5ec14ec96a1d26b87620d013142140f`. Repo rekonstruoitiin GitHub-connectorin tiedostoista, koska execution-ympäristön proxy esti `git clone`-komennon. Jatkokierroksella palautettu koodi löytyi paikallisesta `/workspace/Elarventis`-hakemistosta ja tallennettiin `main`-haaraan.
+- Vercel `elarventis` on liitetty tähän GitHub-repoon. Käyttäjä hyväksyi main-haaran automaattisen tuotantojulkaisun jatkokierroksella; viimeisin tarkistettu commit `6e5c782` saavutti `READY`-tilan.
 - Supabase `ktaoqivtuzcitxjfyyys`: Frankfurt, ACTIVE_HEALTHY, PostgreSQL 17.11. Lukuhetkellä 0 public-taulua, 0 Auth-käyttäjää, 0 Storage-buckettia ja 0 objektia sekä 0 sovellusmigraatiota. Security Advisor: 0 havaintoa tyhjästä skeemasta.
 - Migraatiota ei ajettu. Eristetty SQL-migraatiotesti ja tietokannan sekä Storagen palautustesti: **ei suoritettu**. Docker-socket palautti `operation not permitted`; uutta maksullista projektia ei luotu. Tyhjä projekti ei korvaa palautustestiä.
 - Node 24.19: 24/24 synteettistä moduulitestiä läpäisi (audit 6, laskuparseri 5, hinnastoparseri 4, raportti ja reklamaatio 5, latauksen tilakone 4). Testit eivät ole API-, tietokanta- tai E2E-testejä.
 - Synteettiset PDF:t läpäisivät `pdfinfo`-rakennetarkistuksen (1 ja 2 A4-sivua); synteettinen XLSX läpäisi `unzip -t`-eheystarkistuksen. Visuaalista tai taulukkolaskentaohjelman testiä ei tehty.
-- TypeScript typecheck, ESLint ja Next production build: **käynnistys epäonnistui**, kukin exit 127 (`tsc`, `eslint` ja `next` puuttuivat). `npm ci --offline` epäonnistui puuttuvaan `yocto-queue`-välimuistipakettiin; execution-proxy ei vastannut. Selaimen 375/430/768/1440 px ja saavutettavuustarkistukset: **ei suoritettu**.
+- Paikalliset TypeScript typecheck, ESLint ja Next production build: **käynnistys epäonnistui**, kukin exit 127 (`tsc`, `eslint` ja `next` puuttuivat). `npm ci --offline` epäonnistui puuttuvaan `yocto-queue`-välimuistipakettiin; execution-proxy ei vastannut. Vercel-tuotantobuild sisälsi onnistuneen TypeScript-tarkistuksen ja Next-käännöksen. Erillistä ESLint-ajoa, selaimen 375/430/768/1440 px tarkistusta tai saavutettavuustarkistusta **ei suoritettu**.
 - RLS-eristys, Storage-käyttöoikeudet, kahden yrityksen API-kokeet, sähköpostitoimitus, migraation palautus sekä koko 22 kohdan E2E: **ei suoritettu**.
 
 ## Turvallisuus ja palautuminen
 
 Lokakuun 13. päivän jatkokierroksella aiemman työtilan koko lähdekoodi löytyi `/workspace/Elarventis`-hakemistosta. GitHubin `main` oli yhä commitissa `43d1c7aca5ec14ec96a1d26b87620d013142140f`. Projektissa oli edelleen 0 Auth-käyttäjää, 0 public-taulua, 0 bucketia ja 0 objektia. `npm test` läpäisi jälleen kaikki viisi testitiedostoa (24 nimettyä testiä); TypeScript-tiedostojen Node-syntaksitarkistus läpäisi. Varsinaista typecheckiä ei voitu tehdä: `tsc` puuttuu. Työtila- ja Auth-reitit suljettiin palvelinympäristön `ELARVENTIS_MVP_ENABLED`-portilla, jonka oletusarvo on pois käytöstä. Portin lisääminen ei todista sovelluksen toimivuutta.
+
+Palautettu toteutus tallennettiin GitHubin `main`-haaraan commitissa `1ce7ad36b897fc5a21a5354a858f024001f7a1d0`. Vercelin ensimmäinen build paljasti Storage-uploadin TypeScript-tyyppivirheen; se korjattiin commitissa `e5b91a3661bceb2b83fe014984ba3fbb42851da4`. Toinen build paljasti PDF-parserin `ES2017`-kohdeasetuksen; kohde vaihdettiin `ES2018`:aan commitissa `6e5c782cbae67c66f90d75711eb8862c7ccf6060`. Tämän commitin Vercel-tuotantojulkaisu saavutti `READY`-tilan: Next.js 15.5.27 käänsi lähdekoodin, tarkisti tyypit ja generoi 24 staattista sivua. Tämä ei ole erillisen `npm run lint`-komennon tulos eikä sovelluksen E2E-testi. Vercelin tuotantoympäristössä `ELARVENTIS_MVP_ENABLED`-muuttujaa ei ole asetettu, joten työtilaportti on suljettu.
+
+Migraation arvioidut riskit ja aktivointijärjestys on kirjattu [tietokannan aktivointidokumenttiin](DATABASE_ACTIVATION.md). Erillistä migraatiohyväksyntää ei ole vielä pyydetty, koska palautustesti ja keskeiset eheysportit ovat avoinna. Migraatiota ei ole suoritettu.
 
 Ei oikeaa asiakasdataa. Sovellus käyttää käyttäjän JWT:tä; service-role-avainta ei lisätty. SQL sisältää org-sidotut FK:t, RLS-politiikat ja yksityisen bucketin, mutta niitä ei ole vahvistettu PostgreSQL:ssä. Tiedostojen keskeytyneet tilat voidaan täsmäyttää ja epäonnistunut varaus siivota vain Storage-objektin puuttuessa. Hyväksyttyä dokumenttia ei siivota automaattisesti. Palautusmenettelyn tulee kattaa PostgreSQL-dumpin palautus **ja** bucket-objektien erillinen kopiointi sekä tarkistussummien vertailu erillisessä ympäristössä. Tätä ei ole tehty.
 
