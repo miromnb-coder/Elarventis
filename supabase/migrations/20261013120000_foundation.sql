@@ -128,6 +128,7 @@ begin
  perform 1 from public.contracts where org_id=p_org and id=v.contract_id for update;
  select count(*) into v_count from public.rate_rules where org_id=p_org and contract_version_id=p_version;
  if v_count=0 then raise exception 'Version has no rates'; end if;
+ if v.document_id is null or not exists(select 1 from public.documents d where d.org_id=p_org and d.id=v.document_id and d.kind='contract_pdf' and d.state='stored') then raise exception 'Contract PDF is required'; end if;
  if exists(select 1 from public.rate_rules where org_id=p_org and contract_version_id=p_version and (source_document_id is null or source_row is null)) then raise exception 'Missing rate source'; end if;
  if exists(select 1 from public.contract_versions other where other.org_id=p_org and other.contract_id=v.contract_id
   and other.id<>p_version and other.state='approved'
