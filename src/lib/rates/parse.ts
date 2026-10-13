@@ -8,7 +8,7 @@ export function cents(text: string): number {
   if (!Number.isSafeInteger(result) || result > 2147483647) throw new Error("Hinta ylittää sallitun rajan");
   return result;
 }
-function parseCsv(text: string): string[][] {
+export function parseCsv(text: string): string[][] {
   const delimiter = text.split("\n", 1)[0].includes(";") ? ";" : ",";
   const rows: string[][] = []; let row: string[] = []; let cell = ""; let quote = false;
   for (let i = 0; i < text.length; i++) {
@@ -49,7 +49,7 @@ function entry(bytes: Buffer, wanted: string): string {
   }
   throw new Error("Excel-taulukko puuttuu");
 }
-function parseXlsx(bytes: Buffer): string[][] {
+export function parseXlsx(bytes: Buffer): string[][] {
   if (bytes.subarray(0, 4).toString("hex") !== "504b0304") throw new Error("Virheellinen Excel-tiedosto");
   const strings: string[] = [];
   try {
@@ -90,3 +90,4 @@ export function parseRates(bytes: Buffer, filename: string): RateRow[] {
     return { service_code: get("palvelu"), zone: get("vyohyke"), min_weight_g: Number(min), max_weight_g: Number(max), price_minor: cents(get("hinta_eur")), vat_basis: vat === "sisaltaa" ? "including_vat" : "excluding_vat", source_row: index + 2 };
   });
 }
+

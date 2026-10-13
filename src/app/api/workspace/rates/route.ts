@@ -1,6 +1,6 @@
-import { createHash, randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { currentUser, db, storage, canManage } from "@/lib/supabase/rest";
+import { currentUser, db, canManage } from "@/lib/supabase/rest";
+import { storeDocument } from "@/lib/documents/upload";
 import { parseRates, RateRow } from "@/lib/rates/parse";
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function error(message: string, status = 400) { return NextResponse.json({ error: message }, { status }); }
@@ -23,15 +23,10 @@ export async function POST(request: NextRequest) {
   try {
     const versions = await db<{ id: string; state: string }[]>("contract_versions?select=id,state&id=eq." + versionId + "&org_id=eq." + orgId);
     if (!versions.length || !["draft","pending_review"].includes(versions[0].state)) return error("Versiota ei voi muokata", 403);
-    const hash = createHash("sha256").update(bytes).digest("hex");
-    const existing = await db<{ id: string }[]>("documents?select=id&org_id=eq." + orgId + "&kind=eq." + (file.name.toLowerCase().endsWith(".csv") ? "rate_csv" : "rate_xlsx") + "&sha256=eq." + hash);
-    if (existing.length) return error("Tämä tiedosto on jo tuotu");
-    const documentId = randomUUID(); const path = orgId + "/" + documentId;
     const mime = file.name.toLowerCase().endsWith(".csv") ? "text/csv" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-    await db("documents", { method: "POST", body: JSON.stringify({ id: documentId, org_id: orgId, kind: mime === "text/csv" ? "rate_csv" : "rate_xlsx", original_name: file.name.slice(0,240), storage_path: path, sha256: hash, mime, size_bytes: bytes.length, uploader_id: user.id }) });
-    const upload = await storage("elarventis-documents/" + path, { method: "POST", headers: { "Content-Type": mime }, body: bytes });
-    if (!upload.ok) return error("Tiedoston tallennus epäonnistui", 500);
+    const { id: documentId } = await storeDocument({ orgId, userId: user.id, kind: mime === "text/csv" ? "rate_csv" : "rate_xlsx", name: file.name, mime, bytes });
     await db("rpc/save_rate_draft", { method: "POST", body: JSON.stringify({ p_org: orgId, p_version: versionId, p_document: documentId, p_rows: edited }) });
     return NextResponse.json({ count: edited.length });
   } catch { return error("Hinnaston tallennus epäonnistui", 400); }
 }
+

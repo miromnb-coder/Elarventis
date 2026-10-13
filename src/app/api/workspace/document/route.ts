@@ -1,6 +1,6 @@
-import { createHash, randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { currentUser, db, storage, canManage } from "@/lib/supabase/rest";
+import { currentUser, db, canManage } from "@/lib/supabase/rest";
+import { storeDocument } from "@/lib/documents/upload";
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export async function POST(request: NextRequest) {
   if (request.headers.get("origin") !== request.nextUrl.origin) return NextResponse.json({ error: "Virheellinen alkuperä" }, { status: 403 });
@@ -16,14 +16,9 @@ export async function POST(request: NextRequest) {
   try {
     const versions = await db<{ id: string; state: string }[]>("contract_versions?select=id,state&id=eq." + versionId + "&org_id=eq." + orgId);
     if (!versions.length || versions[0].state !== "draft") return NextResponse.json({ error: "Versiota ei voi muokata" }, { status: 403 });
-    const hash = createHash("sha256").update(bytes).digest("hex");
-    const existing = await db<{ id: string }[]>("documents?select=id&org_id=eq." + orgId + "&kind=eq.contract_pdf&sha256=eq." + hash);
-    if (existing.length) return NextResponse.json({ error: "Tämä dokumentti on jo tallennettu" }, { status: 400 });
-    const documentId = randomUUID(); const path = orgId + "/" + documentId;
-    await db("documents", { method: "POST", body: JSON.stringify({ id: documentId, org_id: orgId, kind: "contract_pdf", original_name: file.name.slice(0,240), storage_path: path, sha256: hash, mime: "application/pdf", size_bytes: bytes.length, uploader_id: user.id }) });
-    const uploaded = await storage("elarventis-documents/" + path, { method: "POST", headers: { "Content-Type": "application/pdf" }, body: bytes });
-    if (!uploaded.ok) return NextResponse.json({ error: "Tiedoston tallennus epäonnistui" }, { status: 500 });
+    const { id: documentId } = await storeDocument({ orgId, userId: user.id, kind: "contract_pdf", name: file.name, mime: "application/pdf", bytes });
     await db("contract_versions?org_id=eq." + orgId + "&id=eq." + versionId, { method: "PATCH", body: JSON.stringify({ document_id: documentId }) });
     return NextResponse.json({ id: documentId });
   } catch { return NextResponse.json({ error: "Dokumentin tallennus epäonnistui" }, { status: 400 }); }
 }
+

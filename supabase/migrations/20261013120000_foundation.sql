@@ -37,11 +37,11 @@ create table public.carriers (
 );
 create table public.documents (
  id uuid primary key default gen_random_uuid(), org_id uuid not null references public.organizations(id) on delete restrict,
- kind text not null check(kind in ('contract_pdf','rate_csv','rate_xlsx')),
+ kind text not null check(kind in ('contract_pdf','rate_csv','rate_xlsx','invoice_pdf','invoice_csv','invoice_xlsx','report_pdf','report_csv','report_xlsx')),
  original_name text not null check(length(original_name) between 1 and 240),
  storage_path text not null unique, sha256 text not null check(sha256 ~ '^[0-9a-f]{64}$'),
- mime text not null check((kind='contract_pdf' and mime='application/pdf') or (kind='rate_csv' and mime='text/csv') or (kind='rate_xlsx' and mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')), size_bytes integer not null check(size_bytes between 1 and 10485760),
- uploader_id uuid not null references auth.users(id), state text not null default 'stored' check(state in ('stored','invalid','archived')),
+ mime text not null check((kind like '%_pdf' and mime='application/pdf') or (kind like '%_csv' and mime='text/csv') or (kind like '%_xlsx' and mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')), size_bytes integer not null check(size_bytes between 1 and 10485760),
+ uploader_id uuid not null references auth.users(id), state text not null default 'uploading' check(state in ('uploading','stored','failed','invalid','archived')),
  created_at timestamptz not null default now(), unique(org_id,id), unique(org_id,kind,sha256),
  check(storage_path = org_id::text || '/' || id::text)
 );
@@ -49,7 +49,7 @@ create table public.document_extractions (
  id uuid primary key default gen_random_uuid(), org_id uuid not null, document_id uuid not null,
  parser_version text not null, model_version text, proposed_fields jsonb not null default '{}'::jsonb,
  confidence numeric(4,3), review_state public.review_state not null default 'draft',
- created_at timestamptz not null default now(), unique(org_id,id),
+ created_at timestamptz not null default now(), unique(org_id,id), unique(org_id,document_id,parser_version),
  foreign key(org_id,document_id) references public.documents(org_id,id) on delete restrict
 );
 create table public.contracts (
@@ -80,19 +80,21 @@ create table public.rate_rules (
  price_minor integer not null check(price_minor >= 0), currency text not null default 'EUR' check(currency = 'EUR'),
  vat_basis text not null check(vat_basis in ('excluding_vat','including_vat')),
  source_document_id uuid, source_row integer check(source_row > 0),
- created_at timestamptz not null default now(), unique(org_id,id),
+ effective_from date, effective_to date,
+ created_at timestamptz not null default now(), unique(org_id,id), unique(org_id,contract_version_id,id),
  foreign key(org_id,contract_version_id) references public.contract_versions(org_id,id) on delete restrict,
  foreign key(org_id,source_document_id) references public.documents(org_id,id) on delete restrict,
  check((min_weight_g is null and max_weight_g is null) or (min_weight_g >= 0 and max_weight_g > min_weight_g)),
  check((rule_type <> 'weight_band') or (min_weight_g is not null and max_weight_g is not null and weight_basis is not null and zone is not null)),
  check((rule_type <> 'zone_price') or zone is not null)
+ ,check(effective_to is null or effective_from is not null and effective_to>=effective_from)
 );
 create index rate_rules_version on public.rate_rules(org_id,contract_version_id);
 alter table public.rate_rules add constraint rate_weight_band_no_overlap exclude using gist (org_id with =, contract_version_id with =, service_code with =, zone with =, int4range(min_weight_g,max_weight_g,'[)') with &&) where (rule_type='weight_band');
 create table public.audit_events (
  id uuid primary key default gen_random_uuid(), org_id uuid not null references public.organizations(id),
  actor_id uuid references auth.users(id), action text not null, entity_type text not null,
- entity_id uuid not null, created_at timestamptz not null default now(), unique(org_id,id)
+ entity_id uuid not null, details jsonb not null default '{}'::jsonb, created_at timestamptz not null default now(), unique(org_id,id)
 );
 
 create function app_private.has_role(p_org uuid, p_roles public.member_role[]) returns boolean
@@ -117,6 +119,42 @@ begin
 end; $$;
 revoke all on function public.create_organization(text) from public,anon;
 grant execute on function public.create_organization(text) to authenticated;
+
+create function public.change_member_role(p_org uuid,p_user uuid,p_role public.member_role) returns void
+language plpgsql security definer set search_path = '' as $$
+declare v_actor public.member_role; v_old public.member_role;
+begin
+ perform 1 from public.organizations where id=p_org for update;
+ select role into v_actor from public.memberships where org_id=p_org and user_id=auth.uid() and status='active';
+ select role into v_old from public.memberships where org_id=p_org and user_id=p_user and status='active' for update;
+ if v_actor is null or v_actor not in ('owner','admin') or v_old is null then raise exception 'Forbidden'; end if;
+ if v_actor='admin' and (v_old in ('owner','admin') or p_role in ('owner','admin')) then raise exception 'Owner action required'; end if;
+ if p_user=auth.uid() and p_role='owner' and v_old<>'owner' then raise exception 'Self promotion forbidden'; end if;
+ if v_old='owner' and p_role<>'owner' and
+  (select count(*) from public.memberships where org_id=p_org and status='active' and role='owner')<=1 then raise exception 'Last owner cannot be removed'; end if;
+ update public.memberships set role=p_role where org_id=p_org and user_id=p_user;
+ insert into public.audit_events(org_id,actor_id,action,entity_type,entity_id,details)
+ values(p_org,auth.uid(),'member_role_changed','membership',p_user,jsonb_build_object('before',v_old,'after',p_role));
+end; $$;
+revoke all on function public.change_member_role(uuid,uuid,public.member_role) from public,anon;
+grant execute on function public.change_member_role(uuid,uuid,public.member_role) to authenticated;
+
+create function public.remove_member(p_org uuid,p_user uuid) returns void
+language plpgsql security definer set search_path = '' as $$
+declare v_actor public.member_role; v_old public.member_role;
+begin
+ perform 1 from public.organizations where id=p_org for update;
+ select role into v_actor from public.memberships where org_id=p_org and user_id=auth.uid() and status='active';
+ select role into v_old from public.memberships where org_id=p_org and user_id=p_user and status='active' for update;
+ if v_actor is null or v_actor not in ('owner','admin') or v_old is null then raise exception 'Forbidden'; end if;
+ if v_actor='admin' and v_old in ('owner','admin') then raise exception 'Owner action required'; end if;
+ if v_old='owner' and (select count(*) from public.memberships where org_id=p_org and status='active' and role='owner')<=1 then raise exception 'Last owner cannot be removed'; end if;
+ update public.memberships set status='removed' where org_id=p_org and user_id=p_user;
+ insert into public.audit_events(org_id,actor_id,action,entity_type,entity_id)
+ values(p_org,auth.uid(),'member_removed','membership',p_user);
+end; $$;
+revoke all on function public.remove_member(uuid,uuid) from public,anon;
+grant execute on function public.remove_member(uuid,uuid) to authenticated;
 
 create function public.approve_version(p_org uuid,p_version uuid) returns void
 language plpgsql security definer set search_path = '' as $$
@@ -143,8 +181,14 @@ grant execute on function public.approve_version(uuid,uuid) to authenticated;
 
 create function app_private.guard_version() returns trigger language plpgsql set search_path = '' as $$
 begin
- if old.state in ('approved','superseded','archived') then raise exception 'Historical version is immutable'; end if;
+ if old.state in ('approved','superseded','archived') then
+  if old.state='approved' and new.state='superseded' and
+   (to_jsonb(new) - 'state') = (to_jsonb(old) - 'state') then return new; end if;
+  raise exception 'Historical version is immutable';
+ end if;
  if new.org_id<>old.org_id or new.contract_id<>old.contract_id or new.version_number<>old.version_number then raise exception 'Invalid version update'; end if;
+ if not ((old.state='draft' and new.state in ('draft','pending_review','approved')) or
+   (old.state='pending_review' and new.state in ('pending_review','draft','approved'))) then raise exception 'Invalid version transition'; end if;
  return new;
 end; $$;
 create trigger guard_version before update on public.contract_versions for each row execute function app_private.guard_version();
@@ -181,8 +225,11 @@ create policy carriers_read on public.carriers for select to authenticated using
 create policy carriers_insert on public.carriers for insert to authenticated with check(app_private.has_role(org_id,array['owner','admin']::public.member_role[]));
 create policy carriers_update on public.carriers for update to authenticated using(app_private.has_role(org_id,array['owner','admin']::public.member_role[])) with check(app_private.has_role(org_id,array['owner','admin']::public.member_role[]));
 create policy documents_read on public.documents for select to authenticated using(app_private.has_role(org_id,array['owner','admin','analyst','viewer']::public.member_role[]));
-create policy documents_insert on public.documents for insert to authenticated with check(uploader_id=auth.uid() and app_private.has_role(org_id,array['owner','admin']::public.member_role[]));
+create policy documents_insert on public.documents for insert to authenticated with check(state='uploading' and uploader_id=auth.uid() and
+ (app_private.has_role(org_id,array['owner','admin']::public.member_role[]) or
+ (kind like 'invoice_%' and app_private.has_role(org_id,array['analyst']::public.member_role[]))));
 create policy extractions_read on public.document_extractions for select to authenticated using(app_private.has_role(org_id,array['owner','admin','analyst','viewer']::public.member_role[]));
+create policy extractions_insert on public.document_extractions for insert to authenticated with check(review_state='draft' and app_private.has_role(org_id,array['owner','admin','analyst']::public.member_role[]));
 create policy contracts_read on public.contracts for select to authenticated using(app_private.has_role(org_id,array['owner','admin','analyst','viewer']::public.member_role[]));
 create policy contracts_insert on public.contracts for insert to authenticated with check(app_private.has_role(org_id,array['owner','admin']::public.member_role[]));
 create policy contracts_update on public.contracts for update to authenticated using(app_private.has_role(org_id,array['owner','admin']::public.member_role[])) with check(app_private.has_role(org_id,array['owner','admin']::public.member_role[]));
@@ -198,17 +245,87 @@ create policy events_read on public.audit_events for select to authenticated usi
 insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
  values('elarventis-documents','elarventis-documents',false,10485760,array['application/pdf','text/csv','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
 create policy elarventis_storage_read on storage.objects for select to authenticated using (
- bucket_id='elarventis-documents' and exists(select 1 from public.documents d where d.storage_path=name and d.state='stored'
- and app_private.has_role(d.org_id,array['owner','admin','analyst','viewer']::public.member_role[]))
+ bucket_id='elarventis-documents' and exists(select 1 from public.documents d where d.storage_path=name
+ and ((d.state='stored' and app_private.has_role(d.org_id,array['owner','admin','analyst','viewer']::public.member_role[]))
+ or (d.state='uploading' and d.uploader_id=auth.uid() and
+ (app_private.has_role(d.org_id,array['owner','admin']::public.member_role[]) or
+ (d.kind like 'invoice_%' and app_private.has_role(d.org_id,array['analyst']::public.member_role[]))))))
 );
 create policy elarventis_storage_insert on storage.objects for insert to authenticated with check (
- bucket_id='elarventis-documents' and exists(select 1 from public.documents d where d.storage_path=name and d.state='stored'
- and d.uploader_id=auth.uid() and app_private.has_role(d.org_id,array['owner','admin']::public.member_role[]))
+ bucket_id='elarventis-documents' and exists(select 1 from public.documents d where d.storage_path=name and d.state='uploading'
+ and d.uploader_id=auth.uid() and
+ (app_private.has_role(d.org_id,array['owner','admin']::public.member_role[]) or
+ (d.kind like 'invoice_%' and app_private.has_role(d.org_id,array['analyst']::public.member_role[]))))
 );
 grant select on public.organizations,public.profiles,public.memberships,public.invitations,public.carriers,public.documents,public.document_extractions,public.contracts,public.contract_versions,public.rate_rules,public.audit_events to authenticated;
 grant insert,update on public.profiles,public.carriers,public.contracts,public.contract_versions,public.rate_rules to authenticated;
 grant delete on public.rate_rules to authenticated;
 grant insert on public.documents to authenticated;
+grant insert on public.document_extractions to authenticated;
+-- Only the uploader may mark a verified upload stored. This RPC is called after
+-- Storage reports success (or after an interrupted request verifies the object).
+create function public.finish_document(p_org uuid,p_document uuid) returns void
+language plpgsql security definer set search_path = '' as $$
+begin
+ if not app_private.has_role(p_org,array['owner','admin','analyst']::public.member_role[]) then raise exception 'Forbidden'; end if;
+ update public.documents set state='stored' where org_id=p_org and id=p_document
+  and uploader_id=auth.uid() and state in ('uploading','stored') and
+  (kind like 'invoice_%' or app_private.has_role(p_org,array['owner','admin']::public.member_role[]))
+  and exists(select 1 from storage.objects o where o.bucket_id='elarventis-documents' and o.name=public.documents.storage_path);
+ if not found then raise exception 'Document unavailable'; end if;
+end; $$;
+revoke all on function public.finish_document(uuid,uuid) from public,anon;
+grant execute on function public.finish_document(uuid,uuid) to authenticated;
+
+create function public.fail_document(p_org uuid,p_document uuid) returns void
+language plpgsql security definer set search_path = '' as $$
+begin
+ if not app_private.has_role(p_org,array['owner','admin','analyst']::public.member_role[]) then raise exception 'Forbidden'; end if;
+ update public.documents set state='failed' where org_id=p_org and id=p_document
+  and uploader_id=auth.uid() and state='uploading' and
+  (kind like 'invoice_%' or app_private.has_role(p_org,array['owner','admin']::public.member_role[]));
+end; $$;
+revoke all on function public.fail_document(uuid,uuid) from public,anon;
+grant execute on function public.fail_document(uuid,uuid) to authenticated;
+
+create function public.retry_document(p_org uuid,p_document uuid) returns void
+language plpgsql security definer set search_path = '' as $$
+begin
+ if not app_private.has_role(p_org,array['owner','admin','analyst']::public.member_role[]) then raise exception 'Forbidden'; end if;
+ update public.documents set state='uploading' where org_id=p_org and id=p_document
+  and uploader_id=auth.uid() and state='failed' and
+  (kind like 'invoice_%' or app_private.has_role(p_org,array['owner','admin']::public.member_role[]));
+ if not found then raise exception 'Document unavailable'; end if;
+end; $$;
+revoke all on function public.retry_document(uuid,uuid) from public,anon;
+grant execute on function public.retry_document(uuid,uuid) to authenticated;
+
+create function public.cleanup_failed_document(p_org uuid,p_document uuid) returns void
+language plpgsql security definer set search_path = '' as $$
+declare v public.documents%rowtype;
+begin
+ if not app_private.has_role(p_org,array['owner','admin']::public.member_role[]) then raise exception 'Forbidden'; end if;
+ select * into v from public.documents where org_id=p_org and id=p_document for update;
+ if not found or v.state<>'failed' then raise exception 'Only failed documents can be cleaned'; end if;
+ if exists(select 1 from storage.objects where bucket_id='elarventis-documents' and name=v.storage_path) then raise exception 'Storage object still exists'; end if;
+ delete from public.documents where org_id=p_org and id=p_document;
+ insert into public.audit_events(org_id,actor_id,action,entity_type,entity_id,details)
+ values(p_org,auth.uid(),'failed_document_cleaned','document',p_document,jsonb_build_object('sha256',v.sha256));
+end; $$;
+revoke all on function public.cleanup_failed_document(uuid,uuid) from public,anon;
+grant execute on function public.cleanup_failed_document(uuid,uuid) to authenticated;
+
+create function public.supersede_version(p_org uuid,p_version uuid) returns void
+language plpgsql security definer set search_path = '' as $$
+begin
+ if not app_private.has_role(p_org,array['owner','admin']::public.member_role[]) then raise exception 'Forbidden'; end if;
+ update public.contract_versions set state='superseded' where org_id=p_org and id=p_version and state='approved';
+ if not found then raise exception 'Approved version not found'; end if;
+ insert into public.audit_events(org_id,actor_id,action,entity_type,entity_id)
+ values(p_org,auth.uid(),'supersede','contract_version',p_version);
+end; $$;
+revoke all on function public.supersede_version(uuid,uuid) from public,anon;
+grant execute on function public.supersede_version(uuid,uuid) to authenticated;
 create function public.save_rate_draft(p_org uuid,p_version uuid,p_document uuid,p_rows jsonb) returns integer
 language plpgsql security definer set search_path = '' as $$
 declare v public.contract_versions%rowtype; r jsonb; n integer := 0;
@@ -230,3 +347,164 @@ begin
 end; $$;
 revoke all on function public.save_rate_draft(uuid,uuid,uuid,jsonb) from public,anon;
 grant execute on function public.save_rate_draft(uuid,uuid,uuid,jsonb) to authenticated;
+
+-- Phases 7-9: all cross-entity links carry org_id.
+create table public.invoices (
+ id uuid primary key default gen_random_uuid(), org_id uuid not null references public.organizations(id), carrier_id uuid not null,
+ document_id uuid not null, invoice_number text not null check(length(invoice_number) between 1 and 100),
+ invoice_date date not null, currency text not null default 'EUR' check(currency='EUR'),
+ total_minor bigint not null check(total_minor>=0), vat_basis text check(vat_basis in ('including_vat','excluding_vat','mixed')),
+ extraction_state text not null default 'pending' check(extraction_state in ('pending','review','approved','error')),
+ audit_state text not null default 'pending' check(audit_state in ('pending','partial','completed','error')),
+ created_at timestamptz not null default now(), updated_at timestamptz not null default now(), unique(org_id,id), unique(org_id,carrier_id,invoice_number), unique(org_id,document_id),
+ foreign key(org_id,carrier_id) references public.carriers(org_id,id), foreign key(org_id,document_id) references public.documents(org_id,id)
+);
+create function app_private.guard_invoice_document() returns trigger language plpgsql set search_path = '' as $$
+begin
+ if not exists(select 1 from public.documents d where d.org_id=new.org_id and d.id=new.document_id
+  and d.state='stored' and d.kind in ('invoice_pdf','invoice_csv','invoice_xlsx')) then raise exception 'Stored invoice document required'; end if;
+ return new;
+end; $$;
+create trigger guard_invoice_document before insert or update on public.invoices for each row execute function app_private.guard_invoice_document();
+create table public.shipments (
+ id uuid primary key default gen_random_uuid(), org_id uuid not null, invoice_id uuid not null, shipment_ref text not null,
+ service_date date, service_code text, weight_g integer check(weight_g>=0), zone text,
+ unique(org_id,id), unique(org_id,invoice_id,id), unique(org_id,invoice_id,shipment_ref), foreign key(org_id,invoice_id) references public.invoices(org_id,id)
+);
+create table public.invoice_lines (
+ id uuid primary key default gen_random_uuid(), org_id uuid not null, invoice_id uuid not null, shipment_id uuid,
+ service_code text, shipment_ref text, service_date date, charge_type text not null, quantity integer check(quantity>0), unit text,
+ weight_g integer check(weight_g>=0), zone text, billed_minor bigint not null check(billed_minor>=0),
+ vat_basis text not null check(vat_basis in ('including_vat','excluding_vat')), source_row integer, source_page integer,
+ confidence numeric(4,3) check(confidence between 0 and 1), review_state text not null default 'pending' check(review_state in ('pending','approved','rejected')),
+ reviewed_by uuid references auth.users(id), reviewed_at timestamptz, created_at timestamptz not null default now(),
+ unique(org_id,id), unique(org_id,invoice_id,id), unique(org_id,id,invoice_id), foreign key(org_id,invoice_id) references public.invoices(org_id,id),
+ foreign key(org_id,invoice_id,shipment_id) references public.shipments(org_id,invoice_id,id)
+);
+create table public.invoice_imports (
+ id uuid primary key default gen_random_uuid(), org_id uuid not null, document_id uuid not null,
+ invoice_id uuid, parser_version text not null, column_map jsonb not null default '{}'::jsonb,
+ state text not null default 'queued' check(state in ('queued','processing','review','failed')),
+ error_code text, created_at timestamptz not null default now(), unique(org_id,id), unique(org_id,document_id,parser_version),
+ foreign key(org_id,document_id) references public.documents(org_id,id), foreign key(org_id,invoice_id) references public.invoices(org_id,id)
+);
+create table public.jobs (
+ id uuid primary key default gen_random_uuid(), org_id uuid not null references public.organizations(id), kind text not null check(kind in ('invoice_extract','audit','report')),
+ dedupe_key text not null, payload jsonb not null default '{}'::jsonb,
+ state text not null default 'queued' check(state in ('queued','leased','retry','done','dead')),
+ attempts integer not null default 0 check(attempts between 0 and 3), lease_until timestamptz, leased_by uuid references auth.users(id), next_attempt_at timestamptz not null default now(),
+ error_code text, created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+ unique(org_id,id), unique(org_id,kind,dedupe_key)
+);
+create table public.audit_runs (
+ id uuid primary key default gen_random_uuid(), org_id uuid not null, invoice_id uuid not null,
+ engine_version text not null, input_snapshot jsonb not null, state text not null check(state in ('processing','partial','completed','error')),
+ created_by uuid not null references auth.users(id), created_at timestamptz not null default now(), unique(org_id,id), unique(org_id,id,invoice_id),
+ foreign key(org_id,invoice_id) references public.invoices(org_id,id)
+);
+create table public.audit_results (
+ id uuid primary key default gen_random_uuid(), org_id uuid not null, run_id uuid not null, invoice_id uuid not null, invoice_line_id uuid not null,
+ contract_version_id uuid, rate_rule_id uuid, status text not null check(status in ('OK','DISCREPANCY_REVIEW','MISSING_DATA','UNSUPPORTED_RULE','PARSER_REVIEW','ERROR')),
+ billed_minor bigint not null, expected_minor bigint, difference_minor bigint,
+ calculation_trace jsonb not null, evidence_refs jsonb not null, created_at timestamptz not null default now(),
+ unique(org_id,id), unique(org_id,run_id,invoice_line_id), foreign key(org_id,run_id,invoice_id) references public.audit_runs(org_id,id,invoice_id),
+ foreign key(org_id,invoice_line_id,invoice_id) references public.invoice_lines(org_id,id,invoice_id),
+ foreign key(org_id,contract_version_id) references public.contract_versions(org_id,id),
+ foreign key(org_id,contract_version_id,rate_rule_id) references public.rate_rules(org_id,contract_version_id,id)
+);
+create table public.finding_decisions (
+ id uuid primary key default gen_random_uuid(), org_id uuid not null, result_id uuid not null,
+ decision text not null check(decision in ('accepted','rejected','needs_review')),
+ comment text check(length(comment)<=2000), actor_id uuid not null references auth.users(id), created_at timestamptz not null default now(),
+ unique(org_id,id), foreign key(org_id,result_id) references public.audit_results(org_id,id)
+);
+create table public.reports (
+ id uuid primary key default gen_random_uuid(), org_id uuid not null, run_id uuid not null, document_id uuid not null,
+ format text not null check(format in ('pdf','csv','xlsx')), report_version text not null, created_by uuid not null references auth.users(id),
+ created_at timestamptz not null default now(), unique(org_id,id), foreign key(org_id,run_id) references public.audit_runs(org_id,id),
+ foreign key(org_id,document_id) references public.documents(org_id,id)
+);
+do $$ declare t text; begin
+ foreach t in array array['invoices','shipments','invoice_lines','invoice_imports','jobs','audit_runs','audit_results','finding_decisions','reports'] loop
+  execute format('alter table public.%I enable row level security',t);
+  execute format('create policy tenant_read on public.%I for select to authenticated using (app_private.has_role(org_id,array[''owner'',''admin'',''analyst'',''viewer'']::public.member_role[]))',t);
+  execute format('grant select on public.%I to authenticated',t);
+ end loop;
+end $$;
+create policy invoices_insert on public.invoices for insert to authenticated with check(extraction_state='pending' and audit_state='pending' and app_private.has_role(org_id,array['owner','admin','analyst']::public.member_role[]));
+create policy lines_insert on public.invoice_lines for insert to authenticated with check(review_state='pending' and reviewed_by is null and reviewed_at is null and app_private.has_role(org_id,array['owner','admin','analyst']::public.member_role[]));
+create policy imports_insert on public.invoice_imports for insert to authenticated with check(app_private.has_role(org_id,array['owner','admin','analyst']::public.member_role[]));
+create policy decisions_insert on public.finding_decisions for insert to authenticated with check(actor_id=auth.uid() and app_private.has_role(org_id,array['owner','admin','analyst']::public.member_role[])
+ and exists(select 1 from public.audit_results r where r.org_id=public.finding_decisions.org_id and r.id=public.finding_decisions.result_id and r.status='DISCREPANCY_REVIEW'));
+grant insert on public.invoices,public.invoice_lines to authenticated;
+grant insert on public.invoice_imports,public.finding_decisions to authenticated;
+
+create function public.review_invoice_line(p_org uuid,p_line uuid,p_shipment text,p_service text,p_date date,p_charge text,p_weight integer,p_zone text,p_amount bigint,p_vat text) returns void
+language plpgsql security definer set search_path = '' as $$
+declare v_old public.invoice_lines%rowtype;
+begin
+ if not app_private.has_role(p_org,array['owner','admin','analyst']::public.member_role[]) then raise exception 'Forbidden'; end if;
+ select * into v_old from public.invoice_lines where org_id=p_org and id=p_line for update;
+ if not found or p_shipment is null or length(trim(p_shipment)) not between 1 and 120 or
+ p_service is null or length(trim(p_service)) not between 1 and 80 or p_date is null or
+ p_charge is null or p_charge not in ('base_freight','fuel','discount','minimum','other') or
+ p_vat is null or p_vat not in ('including_vat','excluding_vat') or
+ p_amount is null or p_amount<0 or p_amount>2147483647
+ or (p_weight is not null and (p_weight<0 or p_weight>100000000)) then raise exception 'Invalid line'; end if;
+ update public.invoice_lines set shipment_ref=trim(p_shipment),service_code=trim(p_service),service_date=p_date,charge_type=p_charge,
+ weight_g=p_weight,zone=nullif(trim(p_zone),''),billed_minor=p_amount,vat_basis=p_vat,
+ review_state='approved',reviewed_by=auth.uid(),reviewed_at=now() where org_id=p_org and id=p_line;
+ insert into public.audit_events(org_id,actor_id,action,entity_type,entity_id,details)
+ values(p_org,auth.uid(),'invoice_line_reviewed','invoice_line',p_line,
+ jsonb_build_object('before',to_jsonb(v_old),'after',jsonb_build_object('shipment',p_shipment,'service',p_service,'date',p_date,'charge',p_charge,'weight',p_weight,'zone',p_zone,'amount',p_amount,'vat',p_vat)));
+end; $$;
+revoke all on function public.review_invoice_line(uuid,uuid,text,text,date,text,integer,text,bigint,text) from public,anon;
+grant execute on function public.review_invoice_line(uuid,uuid,text,text,date,text,integer,text,bigint,text) to authenticated;
+
+create function public.enqueue_invoice_extract(p_org uuid,p_document uuid,p_carrier uuid,p_columns jsonb default '{}'::jsonb) returns uuid
+language plpgsql security definer set search_path = '' as $$
+declare v_id uuid;
+begin
+ if not app_private.has_role(p_org,array['owner','admin','analyst']::public.member_role[]) then raise exception 'Forbidden'; end if;
+ if not exists(select 1 from public.documents where org_id=p_org and id=p_document and state='stored' and kind in ('invoice_pdf','invoice_csv','invoice_xlsx')) then raise exception 'Document unavailable'; end if;
+ if not exists(select 1 from public.carriers where org_id=p_org and id=p_carrier and archived_at is null) then raise exception 'Carrier unavailable'; end if;
+ if jsonb_typeof(p_columns)<>'object' or length(p_columns::text)>2048 then raise exception 'Invalid column map'; end if;
+ if (select count(*) from public.jobs where org_id=p_org and state in ('queued','leased','retry')) >= 100 then raise exception 'Queue limit'; end if;
+ insert into public.jobs(org_id,kind,dedupe_key,payload) values(p_org,'invoice_extract',p_document::text,jsonb_build_object('document_id',p_document,'carrier_id',p_carrier,'columns',p_columns))
+ on conflict(org_id,kind,dedupe_key) do update set updated_at=public.jobs.updated_at returning id into v_id;
+ return v_id;
+end; $$;
+revoke all on function public.enqueue_invoice_extract(uuid,uuid,uuid,jsonb) from public,anon;
+grant execute on function public.enqueue_invoice_extract(uuid,uuid,uuid,jsonb) to authenticated;
+
+create function public.claim_invoice_job(p_org uuid) returns public.jobs
+language plpgsql security definer set search_path = '' as $$
+declare v_job public.jobs%rowtype;
+begin
+ if not app_private.has_role(p_org,array['owner','admin','analyst']::public.member_role[]) then raise exception 'Forbidden'; end if;
+ update public.jobs set state='dead',error_code='LEASE_TIMEOUT',lease_until=null,leased_by=null,updated_at=now()
+ where org_id=p_org and kind='invoice_extract' and state='leased' and lease_until<now() and attempts>=3;
+ select * into v_job from public.jobs where org_id=p_org and kind='invoice_extract'
+ and ((state in ('queued','retry') and next_attempt_at<=now()) or (state='leased' and lease_until<now())) and attempts<3
+ order by created_at limit 1 for update skip locked;
+ if not found then return null; end if;
+ update public.jobs set state='leased',attempts=attempts+1,lease_until=now()+interval '2 minutes',leased_by=auth.uid(),updated_at=now()
+ where id=v_job.id returning * into v_job;
+ return v_job;
+end; $$;
+revoke all on function public.claim_invoice_job(uuid) from public,anon;
+grant execute on function public.claim_invoice_job(uuid) to authenticated;
+
+create function public.finish_invoice_job(p_org uuid,p_job uuid,p_ok boolean,p_error text default null) returns void
+language plpgsql security definer set search_path = '' as $$
+begin
+ if not app_private.has_role(p_org,array['owner','admin','analyst']::public.member_role[]) then raise exception 'Forbidden'; end if;
+ update public.jobs set state=case when p_ok then 'done' when attempts>=3 then 'dead' else 'retry' end,
+  error_code=case when p_ok then null else left(coalesce(p_error,'PROCESSING_ERROR'),80) end,
+  next_attempt_at=now()+power(2,attempts)::double precision * interval '1 minute',lease_until=null,leased_by=null,updated_at=now()
+ where org_id=p_org and id=p_job and state='leased' and leased_by=auth.uid() and lease_until>now();
+ if not found then raise exception 'Lease unavailable'; end if;
+end; $$;
+revoke all on function public.finish_invoice_job(uuid,uuid,boolean,text) from public,anon;
+grant execute on function public.finish_invoice_job(uuid,uuid,boolean,text) to authenticated;
+

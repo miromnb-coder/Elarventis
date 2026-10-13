@@ -1,6 +1,6 @@
 # Elarventis MVP — Golden test cases (suunnitteluversio)
 
-Kaikki esimerkit ovat synteettisiä. Näitä ei ole vielä ajettu ohjelmakoodia vasten. Testi hyväksytään vasta, kun toteutus palauttaa sovitut senttimäärät, tilat ja jäljitettävät lähdeviitteet.
+Kaikki esimerkit ovat synteettisiä. Rajatun puhtaan tarkastusmoottorin G01–G11-osia ajettiin 13.10.2026 ohjelmakoodia vasten (`tests/audit-engine.test.mjs`, 6/6). Tämä ei ole koko laskun, tietokannan tai käyttöliittymän E2E-hyväksyntä. G12–G16:n pysyvyys-, eristys- ja palautumiskriteerit ovat edelleen testaamatta.
 
 | Case | Syöte | Odotettu tulos |
 | --- | --- | --- |
@@ -24,3 +24,4 @@ Kaikki esimerkit ovat synteettisiä. Näitä ei ole vielä ajettu ohjelmakoodia 
 Toteutuksessa tarvitaan lisäksi tarkat syötedokumenttien fixtures, hyväksytyt hinnastosäännöt, pyöristyspolitiikka, ALV-erittely ja automaattiset testit jokaiselle riville.
 
 **Tärkeää:** Testitapausten rahalaskelmat ovat tarkoituksella yksinkertaisia. Oikea sopimus määrää sovellettavat säännöt ja järjestyksen; järjestelmä ei saa soveltaa esimerkin 15 prosentin polttoainelisää yleissääntönä.
+

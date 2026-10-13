@@ -1,0 +1,9 @@
+# Vaihe 9 — havainnot ja raportit
+
+Tila: **osittain toteutettu, ei hyväksytty** (13.10.2026).
+
+Valmisteltu skeema sisältää `finding_decisions`-historian ja `reports`-taulun. Päätösrivi voidaan liittää vain saman organisaation `DISCREPANCY_REVIEW`-tulokseen, ja RLS rajaa kirjoittajan owner/admin/analyst-rooleihin. Havaintopäätösten luku- ja kirjoitus-API on lisätty; päätökset ovat erillisiä historiarivejä. Tätä ei ole testattu tietokantaa vasten. Havaintojen käyttöliittymä puuttuu.
+
+`src/lib/reporting/index.ts` muodostaa oikeat CSV-, XLSX- ja PDF-tavut synteettisestä raporttimallista. CSV/XLSX-kentissä neutraloidaan kaavatulkinnan alkumerkit. Raportissa erotetaan mahdollinen hintaero hyväksytystä havainnosta; hyvityksiä ei väitetä toteutuneiksi. PDF jakaa kaikki tulosrivit usealle A4-sivulle, mutta fontti muuntaa osan suomenkielisistä merkeistä ASCII-vastineiksi ja pitkät kentät rivitetään yksinkertaisesti. Rajattu reklamaatioteksti muodostetaan vain käyttäjän hyväksymistä positiivisista poikkeamahavainnoista, mutta sitä ei voi vielä käyttää sovelluksen kautta. Raportin vienti-API lukee organisaation dataa RLS:n kautta ja palauttaa yksityisen latauksen ilman pysyvää linkkiä. Audit-ajoja ei vielä voi luoda sovelluksen kautta, joten vienti-API ei vielä saa todellista dataa. Raportin yksityinen tallennus, turvalliset lähdenäkymät ja mobiilikäyttöliittymä puuttuvat.
+
+Viisi synteettistä vienti- ja reklamaatiotestiä läpäisi: CSV:n kaavasuoja ja senttimäärä, XLSX:n ZIP-rakenne ja suojaus, PDF:n perusrakenne, 80 tuloksen monisivuisuus sekä hyväksyttyjen havaintojen suodatus. Lisäksi synteettiset tiedostot tarkistettiin `pdfinfo`-komennolla (1 ja 2 A4-sivua, PDF 1.4) ja `unzip -t`-komennolla (XLSX-arkisto eheä). Visuaalista luettavuustestiä ja Excel-sovelluksen avaustestiä ei tehty.

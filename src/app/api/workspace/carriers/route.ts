@@ -14,3 +14,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ id: rows[0].id });
   } catch { return NextResponse.json({ error: "Kuljetusliikkeen lisäys epäonnistui" }, { status: 400 }); }
 }
+export async function GET(request: NextRequest) {
+  if (!await currentUser()) return NextResponse.json({ error: "Kirjautuminen vaaditaan" }, { status: 401 });
+  const orgId = request.cookies.get("elarventis-org")?.value;
+  if (!orgId || !uuid.test(orgId)) return NextResponse.json({ error: "Valitse työtila" }, { status: 400 });
+  try { return NextResponse.json(await db<{ id: string; name: string }[]>(`carriers?select=id,name&org_id=eq.${orgId}&archived_at=is.null&order=name.asc`)); }
+  catch { return NextResponse.json({ error: "Kuljetusliikkeiden haku epäonnistui" }, { status: 500 }); }
+}
+
