@@ -35,3 +35,13 @@ Viimeisin todellinen tulos ja suorittamatta jääneet testit: [vaiheiden 5–9 Q
 
 Toteutuksen tila: [vaihe 5](docs/PHASE_05_IMPLEMENTATION.md), [vaihe 6](docs/PHASE_06_IMPLEMENTATION.md), [vaihe 7](docs/PHASE_07_IMPLEMENTATION.md), [vaihe 8](docs/PHASE_08_IMPLEMENTATION.md), [vaihe 9](docs/PHASE_09_IMPLEMENTATION.md).
 
+
+## Premium UI, authentication and company account rollout
+
+The public homepage is available independently of the Supabase connection. Protected
+workspace and auth routes remain behind `ELARVENTIS_MVP_ENABLED=disabled` until
+the acceptance gates in [Auth/company QA](docs/AUTH_COMPANY_ACCOUNTS_FINAL_QA.md)
+are satisfied. The prepared company-invitations migration has **not** been
+applied; email invitations are not enabled. See the
+[UI audit](docs/PREMIUM_UI_UX_AUDIT.md) and
+[implementation report](docs/PREMIUM_UI_UX_IMPLEMENTATION.md).
