@@ -6,22 +6,32 @@ export async function POST(request: NextRequest) {
   if (!configured()) return NextResponse.json({ error: "Kirjautumista ei ole määritetty" }, { status: 503 });
   let input: Record<string, string>;
   try { input = await request.json(); } catch { return NextResponse.json({ error: "Virheellinen pyyntö" }, { status: 400 }); }
-  if (!["login", "signup", "recovery", "logout", "update-password"].includes(input.action)) return NextResponse.json({ error: "Tuntematon toiminto" }, { status: 400 });
-  if ((input.email && (!/^\S+@\S+\.\S+$/.test(input.email) || input.email.length > 254)) || (input.password && (input.password.length < 8 || input.password.length > 256))) return NextResponse.json({ error: "Virheellinen syöte" }, { status: 400 });
+  if (!["login", "signup", "resend", "recovery", "logout", "update-password"].includes(input.action)) return NextResponse.json({ error: "Tuntematon toiminto" }, { status: 400 });
+  const needsEmail = ["login", "signup", "resend", "recovery"].includes(input.action);
+  const needsPassword = ["login", "signup", "update-password"].includes(input.action);
+  if ((needsEmail && (typeof input.email !== "string" || !/^\S+@\S+\.\S+$/.test(input.email) || input.email.length > 254)) ||
+      (needsPassword && (typeof input.password !== "string" || input.password.length < 8 || input.password.length > 256))) return NextResponse.json({ error: "Tarkista sähköpostiosoite ja salasana (vähintään 8 merkkiä)." }, { status: 400 });
   const pending: { name: string; value: string; options: Record<string, unknown> }[] = [];
   const client = createServerClient(baseUrl(), publicKey(), { cookies: {
     getAll() { return request.cookies.getAll(); },
     setAll(items) { pending.push(...items); },
   } });
+  if (["logout", "update-password"].includes(input.action)) {
+    const { data, error } = await client.auth.getUser();
+    if (error || !data.user) return NextResponse.json({ error: "Istunto on vanhentunut. Kirjaudu uudelleen." }, { status: 401 });
+  }
   let result;
   let confirmationRequired = false;
   if (input.action === "login") result = await client.auth.signInWithPassword({ email: input.email, password: input.password });
   else if (input.action === "signup") { const signed = await client.auth.signUp({ email: input.email, password: input.password, options: { emailRedirectTo: request.nextUrl.origin + "/auth/callback" } }); result = signed; confirmationRequired = !signed.data.session; }
   else if (input.action === "recovery") result = await client.auth.resetPasswordForEmail(input.email, { redirectTo: request.nextUrl.origin + "/auth/callback?mode=recovery" });
+  else if (input.action === "resend") result = await client.auth.resend({ type: "signup", email: input.email, options: { emailRedirectTo: request.nextUrl.origin + "/auth/callback" } });
   else if (input.action === "update-password") result = await client.auth.updateUser({ password: input.password });
   else result = await client.auth.signOut();
-  if (result.error) return NextResponse.json({ error: "Toiminto epäonnistui. Tarkista tiedot ja yritä uudelleen." }, { status: 400 });
+  // The recovery response must not reveal whether an account exists.
+  if (result.error && !["recovery", "resend"].includes(input.action)) return NextResponse.json({ error: "Toiminto epäonnistui. Tarkista tiedot ja yritä uudelleen." }, { status: 400 });
   const response = NextResponse.json({ ok: true, confirmationRequired });
+  response.headers.set("Cache-Control", "no-store");
   pending.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
   if (input.action === "logout") response.cookies.delete("elarventis-org");
   return response;

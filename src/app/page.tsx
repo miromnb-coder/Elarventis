@@ -1,78 +1,44 @@
-import { ArrowDownRight, ArrowRight, Check, CircleHelp, ClipboardList, FileCheck2, FileText, Layers3, Search, SlidersHorizontal } from "lucide-react";
-import { ContactDraft } from "@/components/contact-draft";
+import Link from "next/link";
+import { ArrowRight, ArrowUpRight, CircleHelp } from "lucide-react";
 import { MobileNav } from "@/components/mobile-nav";
 import { SoftwarePreview } from "@/components/software-preview";
+import { ContactDraft } from "@/components/contact-draft";
 
 const links = [
   { label: "Ratkaisu", href: "#ratkaisu" },
-  { label: "Miten toimii", href: "#miten-toimii" },
-  { label: "Ominaisuudet", href: "#ominaisuudet" },
-  { label: "Ota yhteyttä", href: "#yhteys" },
+  { label: "Työnkulku", href: "#tyonkulku" },
+  { label: "Kenelle", href: "#kenelle" },
+  { label: "Kysymykset", href: "#kysymykset" },
+  { label: "Kirjaudu", href: "/kirjaudu" },
 ];
-
-const benefits = [
-  { icon: Layers3, title: "Sopimusperusteinen tarkastus", text: "Vertaile laskujen veloituksia sovittuihin hintoihin ja ehtoihin." },
-  { icon: Search, title: "Poikkeamien tunnistaminen", text: "Nosta mahdolliset liikaveloitukset ja epäselvät rivit tarkistettaviksi." },
-  { icon: ClipboardList, title: "Perustellut tarkastustulokset", text: "Näe, mistä havainto syntyy ja mikä sen rahallinen vaikutus voi olla." },
-];
-
 const steps = [
-  { number: "01", icon: FileText, title: "Lisää laskut ja sopimukset", text: "Tuo tarkastettavat laskut ja niitä vastaavat kuljetussopimukset samaan näkymään." },
-  { number: "02", icon: SlidersHorizontal, title: "Vertaile ja tunnista poikkeamat", text: "Ohjelmiston tavoitteena on verrata veloituksia sopimusehtoihin ja nostaa erot esiin." },
-  { number: "03", icon: FileCheck2, title: "Tarkista havainnot ja käsittele tulokset", text: "Käy havainnot läpi, arvioi vaikutus ja valmistele tarvittaessa reklamaatio." },
+  ["01", "Sopimus ja hinnasto", "Tuo sovitut veloitusperusteet ja tarkista, että lähdetiedot ovat oikein."],
+  ["02", "Kuljetuslasku", "Lisää tarkastettava lasku. Epäselvät rivit jäävät käsiteltäviksi."],
+  ["03", "Automaattinen tarkastus", "Rajatut veloitukset verrataan hyväksyttyihin sopimushintoihin."],
+  ["04", "Poikkeamat ja raportti", "Tarkista laskennan peruste, tee päätös ja vie raportti eteenpäin."],
 ];
-
-function Wordmark({ small = false }: { small?: boolean }) {
-  return <a href="#alku" className={`wordmark ${small ? "wordmark-small" : ""}`} aria-label="Elarventis, etusivulle">Elarventis<span className="wordmark-period">.</span></a>;
-}
-
+const faq = [
+  ["Tarkastaako Elarventis kaikki kuljetuslaskut?", "Ei automaattisesti kaikkia. Ensimmäinen versio on tarkoitettu rajattuihin, sopimuksella todennettaviin veloituksiin. Epäselvät tapaukset jäävät ihmisen tarkistettaviksi."],
+  ["Mistä mahdollinen poikkeama syntyy?", "Tarkastus vertaa laskun tunnistettua veloitusta hyväksyttyyn hinnastoon ja näyttää laskennan perusteen. Esimerkkiesittely käyttää vain kuvitteellisia tietoja."],
+  ["Tarvitaanko heti integraatio toiminnanohjausjärjestelmään?", "Ei ensimmäisessä käyttöönotossa. Dokumentit voidaan käsitellä rajatussa työnkulussa; mahdolliset integraatiot arvioidaan erikseen."],
+  ["Voiko ohjelmistoa jo käyttää asiakasdatalla?", "Asiakaskäyttöä ei ole avattu. Kirjautumisen, yrityseristyksen ja integraatioiden hyväksymistestit ovat vielä edessä."],
+];
 export default function Home() {
-  return <>
-    <div className="page-shell" id="alku">
-      <header className="site-header wrap">
-        <Wordmark />
-        <nav className="desktop-nav" aria-label="Päänavigaatio">{links.map(link => <a key={link.href} href={link.href}>{link.label}</a>)}</nav>
-        <a className="header-cta" href="#yhteys">Kerro tarpeestasi <ArrowRight size={16} strokeWidth={1.8} /></a>
-        <MobileNav links={links} />
-      </header>
-
-      <main>
-        <section className="hero wrap" aria-labelledby="hero-title">
-          <div className="hero-glow" aria-hidden="true" />
-          <div className="hero-content">
-            <p className="eyebrow"><span className="eyebrow-dot" /> KULJETUSKUSTANNUSTEN UUSI NÄKYMÄ <span className="eyebrow-rule" /></p>
-            <h1 id="hero-title">Kuljetuslaskujen<br /> tarkastus. <em>Uudella</em><br /> tavalla.</h1>
-            <p className="hero-lead">Tunnista mahdollisia liikaveloituksia, vertaile laskuja sopimushintoihin ja hallitse kuljetuskustannusten tarkastuksia yhdessä paikassa.</p>
-            <div className="hero-actions"><a className="button button-dark" href="#ratkaisu">Tutustu ratkaisuun <ArrowRight size={17} /></a><a className="text-link" href="#miten-toimii">Miten se toimii <ArrowDownRight size={16} /></a></div>
-          </div>
-          <div className="hero-side-note" aria-hidden="true"><span /> PAREMPI NÄKYVYYS<br /> HARKITUMMAT PÄÄTÖKSET</div>
-          <div className="hero-bottom"><span>01 / 04</span><span>SELAA ALASPÄIN <ArrowDownRight size={15} /></span></div>
-        </section>
-
-        <section className="benefit-section" id="ratkaisu" aria-labelledby="benefits-title">
-          <div className="wrap"><div className="section-topline"><span>MIKSI ELARVENTIS</span><span>RAKENTEILLA OLEVA RATKAISU</span></div>
-            <div className="benefit-heading"><h2 id="benefits-title">Jokainen veloitus<br /><em>ansaitsee tulla nähdyksi.</em></h2><p>Kuljetuslaskuissa on paljon yksityiskohtia. Elarventiksen tavoitteena on tehdä niiden tarkastuksesta selkeämpää ja hallittavampaa.</p></div>
-            <div className="benefit-grid" id="ominaisuudet">{benefits.map((item, i) => <article className="benefit" key={item.title}><div className="benefit-top"><span className="icon-circle"><item.icon size={24} strokeWidth={1.5} /></span><span className="tiny-index">0{i + 1}</span></div><h3>{item.title}</h3><p>{item.text}</p></article>)}</div>
-          </div>
-        </section>
-
-        <section className="process-section wrap" id="miten-toimii" aria-labelledby="process-title">
-          <div className="section-topline"><span>MITEN SE TOIMII</span><span>AJATUS KOLMESSA VAIHEESSA</span></div>
-          <div className="process-intro"><div><p className="mini-label">SELKEÄ POLKU LASKUSTA HAVAINTOON</p><h2 id="process-title">Tarkastus, joka etenee<br /><em>loogisesti.</em></h2></div><p>Yhdistä lähtötiedot, löydä tarkistettavat erot ja käsittele tulokset hallitusti. Alla on suunniteltu työnkulku — tuote on kehityksen alkuvaiheessa.</p></div>
-          <div className="steps">{steps.map(step => <article className="step" key={step.number}><div className="step-head"><span>{step.number} / 03</span><step.icon size={25} strokeWidth={1.4} /></div><div><h3>{step.title}</h3><p>{step.text}</p></div><ArrowRight className="step-arrow" size={19} strokeWidth={1.5} /></article>)}</div>
-        </section>
-
-        <section className="preview-section" aria-labelledby="preview-title"><div className="wrap">
-          <div className="section-topline"><span>OHJELMISTON ESIKATSELU</span><span>ESIMERKKINÄKYMÄ</span></div>
-          <div className="preview-intro"><div><p className="mini-label">SUUNNITTEILLA OLEVA KÄYTTÖLIITTYMÄ</p><h2 id="preview-title">Näe poikkeama.<br /><em>Ymmärrä vaikutus.</em></h2></div><p>Yksi näkymä laskuihin, tarkastuksen etenemiseen ja havaintojen taustalla oleviin hintaeroihin.</p></div>
-          <SoftwarePreview />
-          <p className="preview-caption"><CircleHelp size={15} /> Konseptiesikatselu. Kaikki nimet, laskut ja summat ovat kuvitteellista esimerkkiaineistoa. Esitetty käyttöliittymä ei kuvaa valmista tuotetta.</p>
-        </div></section>
-
-        <section className="contact-section wrap" id="yhteys" aria-labelledby="contact-title"><div className="contact-glow" aria-hidden="true" /><div className="section-topline"><span>OTA YHTEYTTÄ</span><span>RAKENNETAAN PAREMPI NÄKYMÄ</span></div><div className="contact-content"><div><p className="mini-label">KESKUSTELLAAN TARPEESTASI</p><h2 id="contact-title">Parempi näkyvyys<br /><em>kuljetuskustannuksiin.</em></h2><p>Kiinnostaisiko selkeämpi tapa tarkastaa kuljetuslaskuja? Voit valmistella viestiluonnoksen tällä sivulla. Julkaisemme lähetyskanavan, kun se on määritelty.</p><div className="contact-points"><span><Check size={16} /> Sopimusperusteinen tarkastus</span><span><Check size={16} /> Havainnot päätösten tueksi</span></div></div><ContactDraft /></div></section>
-      </main>
-
-      <footer className="site-footer"><div className="wrap"><div className="footer-main"><div><Wordmark small /><p>Kehitteillä oleva ratkaisu kuljetuslaskujen tarkastukseen.</p></div><nav aria-label="Alatunnisteen navigaatio">{links.map(link => <a href={link.href} key={link.href}>{link.label}</a>)}</nav></div><div className="footer-bottom"><span>© {new Date().getFullYear()} Elarventis</span><span>Tietosuojaseloste ja yritystiedot lisätään, kun ne ovat saatavilla.</span><a href="#alku">Takaisin ylös ↑</a></div></div></footer>
-    </div>
-  </>;
+  return <div className="premium-home" id="alku">
+    <a className="skip-link" href="#sisalto">Siirry sisältöön</a>
+    <header className="site-header wrap"><Link href="/" className="wordmark" aria-label="Elarventis, etusivu">Elarventis<span className="wordmark-period">.</span></Link><nav className="desktop-nav" aria-label="Päänavigaatio">{links.slice(0, 4).map(link => <a key={link.href} href={link.href}>{link.label}</a>)}</nav><Link className="home-login" href="/kirjaudu">Kirjaudu</Link><a className="header-cta" href="#yhteys">Ota yhteyttä <ArrowUpRight size={17} /></a><MobileNav links={links} /></header>
+    <main id="sisalto">
+      <section className="new-hero wrap" aria-labelledby="hero-title">
+        <div className="new-hero-copy"><p className="home-kicker"><span /> KULJETUSLASKUJEN TARKASTUS / B2B</p><h1 id="hero-title">Tiedä, mistä <em>kuljetuslaskusi</em> muodostuvat.</h1><p className="new-hero-lead">Elarventis vertaa yrityksen kuljetuslaskujen veloituksia sovittuihin hintoihin ja kokoaa tarkistettavat erot perusteluineen yhteen työtilaan.</p><div className="hero-actions"><a className="button button-dark" href="#ratkaisu">Tutustu ratkaisuun <ArrowRight size={18} /></a><a className="home-text-link" href="#yhteys">Kerro tarpeestasi ↗</a></div><div className="hero-footnotes"><span>01 / SOPIMUSPERUSTEINEN VERTAILU</span><span>02 / IHMISEN VAHVISTUS</span></div></div>
+        <div className="hero-proof" aria-label="Havainnollistava vertailu"><div className="hero-proof-top"><span>HAVAINNOLLISTAVA ESIMERKKI</span><span>KL-2048 ↗</span></div><div className="hero-proof-main"><span>YKSITTÄINEN VELOITUS</span><strong>Rahdin perusmaksu</strong><div><span>Laskutettu</span><b>1 840 €</b></div><div><span>Sopimushinta</span><b>1 690 €</b></div></div><div className="hero-proof-result"><div><small>TARKISTETTAVA ERO</small><strong>+150 €</strong></div><p>Hinta ylittää sopimusrivin 150 eurolla. Tarkista ehdot ja lähde ennen päätöstä.</p></div><div className="hero-proof-bottom">SOPIMUS → LASKU → PERUSTELTU HAVAINTO</div></div>
+      </section>
+      <div className="home-ribbon"><div className="wrap"><span>Yksi selkeä tarkastuspolku</span><span>Hinnastosta havaintoon <ArrowRight size={17} /></span></div></div>
+      <section className="home-section wrap" id="ratkaisu"><div className="home-section-heading"><div><p className="home-kicker">01 / RATKAISU</p><h2>Poikkeama näkyy.<br /><em>Peruste on mukana.</em></h2></div><p>Manuaalinen tarkastus vie aikaa, kun sopimus, lasku ja päätös elävät eri paikoissa. Elarventis tuo ne samaan, yrityskohtaiseen näkymään.</p></div><div className="home-benefits"><article><span>01</span><h3>Vähemmän käsin vertailua</h3><p>Rajattu sääntöpohjainen tarkastus nostaa tarkistettavat rivit esiin.</p></article><article><span>02</span><h3>Jäljitettävä havainto</h3><p>Näe laskutettu hinta, sopimushinta ja ero samassa asiayhteydessä.</p></article><article><span>03</span><h3>Yhteinen historia</h3><p>Pidä laskut, sopimusversiot ja tarkistuspäätökset samassa työtilassa.</p></article></div></section>
+      <section className="home-product" aria-labelledby="product-title"><div className="wrap"><div className="home-section-heading"><div><p className="home-kicker">02 / TUOTTEEN ESIKATSELU</p><h2 id="product-title">Tarkastelusta <em>ymmärrykseen.</em></h2></div><p>Valitse esimerkkilasku ja katso, miten hintaero ja tarkastuksen tila näkyvät rinnakkain.</p></div><SoftwarePreview /><p className="preview-caption"><CircleHelp size={16} /> Kaikki nimet ja luvut ovat synteettistä esimerkkiaineistoa. Esittely ei ole asiakastulos eikä näyttö tuotantovarmennuksesta.</p></div></section>
+      <section className="home-section wrap" id="tyonkulku"><div className="home-section-heading"><div><p className="home-kicker">03 / TYÖNKULKU</p><h2>Viisi askelta.<br /><em>Yksi tarkistettava ketju.</em></h2></div><p>Tuonti, tulkinta ja laskenta pidetään erillään. Käyttäjä tarkistaa havainnon ennen kuin sitä käytetään päätöksen perusteena.</p></div><div className="home-steps">{steps.map(([number, title, body]) => <article key={number}><span>{number} / 04</span><h3>{title}</h3><p>{body}</p></article>)}</div></section>
+      <section className="home-audience" id="kenelle"><div className="wrap"><p className="home-kicker">04 / KENELLE</p><div className="home-audience-grid"><h2>Kun kuljetuksia on paljon, jokaisen veloituksen <em>pitää kestää tarkastelu.</em></h2><div><p>Elarventis on suunniteltu yrityksille, jotka vertaavat kuljetuslaskuja omiin kuljetussopimuksiinsa.</p><ul><li>Maahantuojat</li><li>Tukkukaupat</li><li>Valmistavat yritykset</li></ul></div></div></div></section>
+      <section className="home-section wrap home-faq" id="kysymykset"><div className="home-section-heading"><div><p className="home-kicker">05 / USEIN KYSYTTYÄ</p><h2>Ennen kuin <em>aloitetaan.</em></h2></div></div><div className="faq-list">{faq.map(([question, answer]) => <details key={question}><summary>{question}<span aria-hidden="true">+</span></summary><p>{answer}</p></details>)}</div></section>
+      <section className="home-contact" id="yhteys"><div className="wrap home-contact-grid"><div><p className="home-kicker">06 / OTA YHTEYTTÄ</p><h2>Selvitetään, miten laskunne tarkastetaan tänään.</h2><p>Valmistele viesti omassa selaimessasi. Lähetyskanava avataan, kun yhteystiedot ja tietosuojateksti ovat valmiit.</p></div><ContactDraft /></div></section>
+    </main><footer className="site-footer"><div className="wrap"><div className="footer-main"><div><Link href="/" className="wordmark wordmark-small">Elarventis<span className="wordmark-period">.</span></Link><p>Kuljetuslaskujen sopimusperusteinen tarkastus yrityksille.</p></div><nav aria-label="Alatunniste">{links.map(link => link.href.startsWith("/") ? <Link key={link.href} href={link.href}>{link.label}</Link> : <a key={link.href} href={link.href}>{link.label}</a>)}</nav></div><div className="footer-bottom"><span>© {new Date().getFullYear()} Elarventis</span><span>Yritystiedot ja tietosuojateksti julkaistaan niiden valmistuttua.</span><a href="#alku">Takaisin ylös ↑</a></div></div></footer>
+  </div>;
 }

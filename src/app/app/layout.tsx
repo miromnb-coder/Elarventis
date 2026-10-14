@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Shell } from "@/components/app/shell";
 import { currentUser, db } from "@/lib/supabase/rest";
+export const dynamic = "force-dynamic";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await currentUser();
   if (!user) redirect("/kirjaudu");
@@ -11,6 +12,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     organizations = memberships.map(item => item.organizations).filter(Boolean);
   } catch { /* Migration not yet installed; setup message is shown in page. */ }
   const choice = (await cookies()).get("elarventis-org")?.value;
+  if (organizations.length && !organizations.some(item => item.id === choice)) redirect("/api/workspace/select-default");
   const active = organizations.find(item => item.id === choice)?.id || organizations[0]?.id;
   return <Shell organizations={organizations} active={active} email={user.email}>{children}</Shell>;
 }
