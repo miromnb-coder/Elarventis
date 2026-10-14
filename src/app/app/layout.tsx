@@ -7,7 +7,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!user) redirect("/kirjaudu");
   let organizations: { id: string; name: string }[] = [];
   try {
-    const memberships = await db<{ org_id: string; organizations: { id: string; name: string } }[]>("memberships?select=org_id,organizations(id,name)&status=eq.active");
+    const memberships = await db<{ org_id: string; organizations: { id: string; name: string } }[]>(`memberships?select=org_id,organizations(id,name)&user_id=eq.${user.id}&status=eq.active`);
     organizations = memberships.map(item => item.organizations).filter(Boolean);
   } catch { /* Migration not yet installed; setup message is shown in page. */ }
   const choice = (await cookies()).get("elarventis-org")?.value;

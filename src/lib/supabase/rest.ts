@@ -31,8 +31,10 @@ export async function storage(path: string, init?: RequestInit) {
 }
 
 export async function canManage(orgId: string) {
+  const user = await currentUser();
+  if (!user) return false;
   try {
-    const rows = await db<{ role: string }[]>("memberships?select=role&org_id=eq." + orgId + "&status=eq.active&limit=1");
+    const rows = await db<{ role: string }[]>("memberships?select=role&org_id=eq." + orgId + "&user_id=eq." + user.id + "&status=eq.active&limit=1");
     return rows.length > 0 && ["owner", "admin"].includes(rows[0].role);
   } catch { return false; }
 }

@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
   const orgId = request.cookies.get("elarventis-org")?.value;
   const input = await request.json().catch(() => ({}));
   if (!orgId || !uuid.test(orgId) || !uuid.test(input.resultId) || !["accepted", "rejected", "needs_review"].includes(input.decision) || (input.comment !== undefined && (typeof input.comment !== "string" || input.comment.length > 2000))) return error("Virheellinen päätös");
-  const roles = await db<{ role: string }[]>(`memberships?select=role&org_id=eq.${orgId}&status=eq.active&limit=1`).catch(() => []);
+  const roles = await db<{ role: string }[]>(`memberships?select=role&org_id=eq.${orgId}&user_id=eq.${user.id}&status=eq.active&limit=1`).catch(() => []);
   if (!roles.length || !["owner", "admin", "analyst"].includes(roles[0].role)) return error("Ei käyttöoikeutta", 403);
   try {
     const result = await db<{ id: string }[]>(`audit_results?select=id&org_id=eq.${orgId}&id=eq.${input.resultId}&status=eq.DISCREPANCY_REVIEW`);

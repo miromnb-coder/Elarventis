@@ -1,4 +1,5 @@
 import { inflateRawSync } from "node:zlib";
+import { validateWorkbookZip } from "./zip.ts";
 export type RateRow = { service_code: string; zone: string; min_weight_g: number; max_weight_g: number; price_minor: number; vat_basis: "including_vat" | "excluding_vat"; source_row: number };
 export function cents(text: string): number {
   const value = text.trim().replace(/\s/g, "").replace(",", ".");
@@ -51,6 +52,7 @@ function entry(bytes: Buffer, wanted: string): string {
 }
 export function parseXlsx(bytes: Buffer): string[][] {
   if (bytes.subarray(0, 4).toString("hex") !== "504b0304") throw new Error("Virheellinen Excel-tiedosto");
+  validateWorkbookZip(bytes);
   const strings: string[] = [];
   try {
     const shared = entry(bytes, "xl/sharedStrings.xml");

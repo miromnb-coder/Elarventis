@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
   const user = await currentUser(); if (!user) return error("Kirjautuminen vaaditaan", 401);
   const orgId = request.cookies.get("elarventis-org")?.value;
   if (!orgId || !uuid.test(orgId)) return error("Valitse työtila");
-  const roles = await db<{ role: string }[]>(`memberships?select=role&org_id=eq.${orgId}&status=eq.active&limit=1`).catch(() => []);
+  const roles = await db<{ role: string }[]>(`memberships?select=role&org_id=eq.${orgId}&user_id=eq.${user.id}&status=eq.active&limit=1`).catch(() => []);
   if (!roles.length || !["owner", "admin", "analyst"].includes(roles[0].role)) return error("Ei käyttöoikeutta", 403);
   const form = await request.formData().catch(() => null);
   const file = form?.get("file"); const carrierId = form?.get("carrierId");

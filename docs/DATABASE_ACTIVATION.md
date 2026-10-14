@@ -21,3 +21,7 @@ Projekti `ktaoqivtuzcitxjfyyys` on alueella `eu-central-1`, tila `ACTIVE_HEALTHY
 Kun yllä olevat portit täyttyvät, tallenna migraation tarkka SHA, ota palvelutasolla varmennettu tietokantakopio ja erillinen Storage-objektien inventaario/tarkistussummat, testaa palautus sekä pyydä erillinen nimenomainen hyväksyntä. Suorita sen jälkeen lähdekoodiin tallennettu versioitu migraatio. Tarkista taulut, rajoitteet, RLS, RPC-oikeudet ja bucketin yksityisyys sekä aja synteettinen kahden yrityksen työnkulku. Älä käytä oikeita asiakastietoja.
 
 Jos migraatio epäonnistuu tai synteettiset testit paljastavat kriittisen virheen, jätä työtilaportti suljetuksi. Palauta tietokanta testatusta kopiosta ja Storage inventaarion mukaisesti; vertaa palautuksen tauluja, rivejä ja objektien tarkistussummia alkuperäiseen. Älä poista migraation luomia tauluja käsin ennen kuin on varmistettu, ettei niihin ole kertynyt säilytettävää tietoa. Varsinaisen projektin palautustoimenpide vaatii erillisen päätöksen.
+
+## Päivitys 14.10.2026
+
+Foundation-migraatioon lisättiin dokumentin palvelinvarmennus, tarkastusajon atominen tallennus ja lease-token. Se on edelleen **ajamatta**. Organisaation palvelutaso on Supabase Free: hallittua päivittäistä tietokantavarmuuskopiota ei ole käytettävissä Free-projekteille. Valmistele oma looginen dump ja erillinen Storage-objektien kopio, kokeile palautus kontrolloidusti ja varmista niiden tarkistussummat. Suoria RLS/Storage-kokeita ei tehty, koska projektin skeema on edelleen tyhjä. Katso [MVP-valmius](ELARVENTIS_MVP_READINESS.md).

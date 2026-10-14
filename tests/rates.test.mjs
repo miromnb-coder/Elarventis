@@ -1,6 +1,6 @@
+import { zipEntry } from "./zip-fixture.mjs";
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
-import { deflateRawSync } from "node:zlib";
 import { parseRates, cents } from "../src/lib/rates/parse.ts";
 test("exact cents reject extra decimals and malformed amounts", () => {
   assert.equal(cents("100,05"), 10005);
@@ -19,18 +19,11 @@ test("weight boundaries, formulas and incomplete headers are rejected", () => {
   assert.throws(() => parseRates(Buffer.from(header + "Paketti;1;0;1000;=1+1;ei_sisalla\n"), "bad.csv"));
 });
 
-function zipEntry(name, content) {
-  const raw = Buffer.from(content); const packed = deflateRawSync(raw); const filename = Buffer.from(name);
-  const header = Buffer.alloc(30);
-  header.writeUInt32LE(0x04034b50, 0); header.writeUInt16LE(20, 4); header.writeUInt16LE(8, 8);
-  header.writeUInt32LE(packed.length, 18); header.writeUInt32LE(raw.length, 22); header.writeUInt16LE(filename.length, 26);
-  return Buffer.concat([header, filename, packed]);
-}
 test("limited XLSX first sheet imports synthetic values", () => {
   const labels = ["palvelu","vyohyke","paino_alku_g","paino_loppu_g","hinta_eur","alv"];
   const values = ["Paketti","1","0","1000","12.50","ei_sisalla"];
   const cells = row => row.map((value, index) => '<c r="' + String.fromCharCode(65 + index) + '1" t="inlineStr"><is><t>' + value + '</t></is></c>').join("");
   const sheet = '<worksheet><sheetData><row r="1">' + cells(labels) + '</row><row r="2">' + cells(values).replaceAll('1"','2"') + '</row></sheetData></worksheet>';
-  const bytes = Buffer.concat([zipEntry("xl/worksheets/sheet1.xml", sheet)]);
+  const bytes = zipEntry("xl/worksheets/sheet1.xml", sheet);
   assert.equal(parseRates(bytes, "rates.xlsx")[0].price_minor, 1250);
 });

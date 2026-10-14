@@ -42,7 +42,8 @@ create table public.documents (
  storage_path text not null unique, sha256 text not null check(sha256 ~ '^[0-9a-f]{64}$'),
  mime text not null check((kind like '%_pdf' and mime='application/pdf') or (kind like '%_csv' and mime='text/csv') or (kind like '%_xlsx' and mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')), size_bytes integer not null check(size_bytes between 1 and 10485760),
  uploader_id uuid not null references auth.users(id), state text not null default 'uploading' check(state in ('uploading','stored','failed','invalid','archived')),
- created_at timestamptz not null default now(), unique(org_id,id), unique(org_id,kind,sha256),
+ created_at timestamptz not null default now(), verified_at timestamptz, unique(org_id,id), unique(org_id,kind,sha256),
+ check(state <> 'stored' or verified_at is not null),
  check(storage_path = org_id::text || '/' || id::text)
 );
 create table public.document_extractions (
@@ -257,25 +258,45 @@ create policy elarventis_storage_insert on storage.objects for insert to authent
  (app_private.has_role(d.org_id,array['owner','admin']::public.member_role[]) or
  (d.kind like 'invoice_%' and app_private.has_role(d.org_id,array['analyst']::public.member_role[]))))
 );
+-- A failed or incomplete upload can be removed by its uploader, never a verified object.
+create policy elarventis_storage_retry_delete on storage.objects for delete to authenticated using (
+ bucket_id='elarventis-documents' and exists(select 1 from public.documents d where d.storage_path=name
+ and d.state in ('uploading','failed') and d.uploader_id=auth.uid()
+ and app_private.has_role(d.org_id,array['owner','admin','analyst']::public.member_role[]))
+);
 grant select on public.organizations,public.profiles,public.memberships,public.invitations,public.carriers,public.documents,public.document_extractions,public.contracts,public.contract_versions,public.rate_rules,public.audit_events to authenticated;
 grant insert,update on public.profiles,public.carriers,public.contracts,public.contract_versions,public.rate_rules to authenticated;
 grant delete on public.rate_rules to authenticated;
 grant insert on public.documents to authenticated;
 grant insert on public.document_extractions to authenticated;
--- Only the uploader may mark a verified upload stored. This RPC is called after
--- Storage reports success (or after an interrupted request verifies the object).
-create function public.finish_document(p_org uuid,p_document uuid) returns void
+-- The browser cannot finalize documents. Only the narrowly scoped server verifier
+-- downloads the stored bytes and invokes this service-role RPC with their digest.
+create function public.verify_document(p_org uuid,p_document uuid,p_actor uuid,p_sha256 text,p_size integer) returns void
 language plpgsql security definer set search_path = '' as $$
 begin
- if not app_private.has_role(p_org,array['owner','admin','analyst']::public.member_role[]) then raise exception 'Forbidden'; end if;
- update public.documents set state='stored' where org_id=p_org and id=p_document
-  and uploader_id=auth.uid() and state in ('uploading','stored') and
-  (kind like 'invoice_%' or app_private.has_role(p_org,array['owner','admin']::public.member_role[]))
-  and exists(select 1 from storage.objects o where o.bucket_id='elarventis-documents' and o.name=public.documents.storage_path);
- if not found then raise exception 'Document unavailable'; end if;
+ if not exists(select 1 from public.memberships m join public.organizations o on o.id=m.org_id
+  where m.org_id=p_org and m.user_id=p_actor and m.status='active' and o.status='active'
+  and (m.role in ('owner','admin') or (m.role='analyst' and exists
+   (select 1 from public.documents d where d.org_id=p_org and d.id=p_document and d.kind like 'invoice_%')))) then raise exception 'Forbidden'; end if;
+ update public.documents set state='stored',verified_at=now()
+ where org_id=p_org and id=p_document and uploader_id=p_actor and state='uploading'
+  and sha256=p_sha256 and size_bytes=p_size and
+  exists(select 1 from storage.objects o where o.bucket_id='elarventis-documents' and o.name=public.documents.storage_path);
+ if not found then raise exception 'Document unavailable or digest mismatch'; end if;
+ insert into public.audit_events(org_id,actor_id,action,entity_type,entity_id,details)
+ values(p_org,p_actor,'document_verified','document',p_document,jsonb_build_object('sha256',p_sha256,'size',p_size));
 end; $$;
-revoke all on function public.finish_document(uuid,uuid) from public,anon;
-grant execute on function public.finish_document(uuid,uuid) to authenticated;
+revoke all on function public.verify_document(uuid,uuid,uuid,text,integer) from public,anon,authenticated;
+grant execute on function public.verify_document(uuid,uuid,uuid,text,integer) to service_role;
+
+create function app_private.guard_document() returns trigger language plpgsql set search_path = '' as $$
+begin
+ if old.state in ('stored','archived') and (to_jsonb(new)-'state') <> (to_jsonb(old)-'state') then raise exception 'Verified document is immutable'; end if;
+ if old.state='stored' and new.state not in ('stored','archived') then raise exception 'Verified document cannot reopen'; end if;
+ if old.state='archived' and new.state<>'archived' then raise exception 'Archived document cannot reopen'; end if;
+ return new;
+end; $$;
+create trigger guard_document before update on public.documents for each row execute function app_private.guard_document();
 
 create function public.fail_document(p_org uuid,p_document uuid) returns void
 language plpgsql security definer set search_path = '' as $$
@@ -398,8 +419,10 @@ create table public.jobs (
 );
 create table public.audit_runs (
  id uuid primary key default gen_random_uuid(), org_id uuid not null, invoice_id uuid not null,
- engine_version text not null, input_snapshot jsonb not null, state text not null check(state in ('processing','partial','completed','error')),
- created_by uuid not null references auth.users(id), created_at timestamptz not null default now(), unique(org_id,id), unique(org_id,id,invoice_id),
+ engine_version text not null, input_snapshot jsonb not null, input_sha256 text not null check(input_sha256 ~ '^[0-9a-f]{64}$'),
+ contract_version_ids uuid[] not null default '{}', finished_at timestamptz, error_code text,
+ state text not null check(state in ('processing','partial','completed','error')),
+ created_by uuid not null references auth.users(id), created_at timestamptz not null default now(), unique(org_id,id), unique(org_id,invoice_id,input_sha256), unique(org_id,id,invoice_id),
  foreign key(org_id,invoice_id) references public.invoices(org_id,id)
 );
 create table public.audit_results (
@@ -477,34 +500,92 @@ end; $$;
 revoke all on function public.enqueue_invoice_extract(uuid,uuid,uuid,jsonb) from public,anon;
 grant execute on function public.enqueue_invoice_extract(uuid,uuid,uuid,jsonb) to authenticated;
 
-create function public.claim_invoice_job(p_org uuid) returns public.jobs
+-- Claim/finish are server-only. A lease token fences delayed or duplicated workers.
+alter table public.jobs add column lease_token uuid;
+create function public.claim_invoice_job(p_org uuid,p_actor uuid) returns public.jobs
 language plpgsql security definer set search_path = '' as $$
 declare v_job public.jobs%rowtype;
 begin
- if not app_private.has_role(p_org,array['owner','admin','analyst']::public.member_role[]) then raise exception 'Forbidden'; end if;
- update public.jobs set state='dead',error_code='LEASE_TIMEOUT',lease_until=null,leased_by=null,updated_at=now()
+ if not exists(select 1 from public.memberships m where m.org_id=p_org and m.user_id=p_actor
+  and m.status='active' and m.role in ('owner','admin','analyst')) then raise exception 'Forbidden'; end if;
+ update public.jobs set state='dead',error_code='LEASE_TIMEOUT',lease_until=null,lease_token=null,leased_by=null,updated_at=now()
  where org_id=p_org and kind='invoice_extract' and state='leased' and lease_until<now() and attempts>=3;
  select * into v_job from public.jobs where org_id=p_org and kind='invoice_extract'
  and ((state in ('queued','retry') and next_attempt_at<=now()) or (state='leased' and lease_until<now())) and attempts<3
  order by created_at limit 1 for update skip locked;
  if not found then return null; end if;
- update public.jobs set state='leased',attempts=attempts+1,lease_until=now()+interval '2 minutes',leased_by=auth.uid(),updated_at=now()
+ update public.jobs set state='leased',attempts=attempts+1,lease_until=now()+interval '2 minutes',
+  lease_token=gen_random_uuid(),leased_by=p_actor,updated_at=now()
  where id=v_job.id returning * into v_job;
  return v_job;
 end; $$;
-revoke all on function public.claim_invoice_job(uuid) from public,anon;
-grant execute on function public.claim_invoice_job(uuid) to authenticated;
+revoke all on function public.claim_invoice_job(uuid,uuid) from public,anon,authenticated;
+grant execute on function public.claim_invoice_job(uuid,uuid) to service_role;
 
-create function public.finish_invoice_job(p_org uuid,p_job uuid,p_ok boolean,p_error text default null) returns void
+create function public.finish_invoice_job(p_org uuid,p_job uuid,p_token uuid,p_actor uuid,p_ok boolean,p_error text default null) returns void
 language plpgsql security definer set search_path = '' as $$
 begin
- if not app_private.has_role(p_org,array['owner','admin','analyst']::public.member_role[]) then raise exception 'Forbidden'; end if;
+ if not exists(select 1 from public.memberships m where m.org_id=p_org and m.user_id=p_actor
+  and m.status='active' and m.role in ('owner','admin','analyst')) then raise exception 'Forbidden'; end if;
  update public.jobs set state=case when p_ok then 'done' when attempts>=3 then 'dead' else 'retry' end,
   error_code=case when p_ok then null else left(coalesce(p_error,'PROCESSING_ERROR'),80) end,
-  next_attempt_at=now()+power(2,attempts)::double precision * interval '1 minute',lease_until=null,leased_by=null,updated_at=now()
- where org_id=p_org and id=p_job and state='leased' and leased_by=auth.uid() and lease_until>now();
+  next_attempt_at=now()+power(2,attempts)::double precision * interval '1 minute',
+  lease_until=null,lease_token=null,leased_by=null,updated_at=now()
+ where org_id=p_org and id=p_job and state='leased' and lease_token=p_token and leased_by=p_actor and lease_until>now();
  if not found then raise exception 'Lease unavailable'; end if;
 end; $$;
-revoke all on function public.finish_invoice_job(uuid,uuid,boolean,text) from public,anon;
-grant execute on function public.finish_invoice_job(uuid,uuid,boolean,text) to authenticated;
+revoke all on function public.finish_invoice_job(uuid,uuid,uuid,uuid,boolean,text) from public,anon,authenticated;
+grant execute on function public.finish_invoice_job(uuid,uuid,uuid,uuid,boolean,text) to service_role;
 
+-- Atomic publish: callers cannot insert rows or mark runs completed separately.
+create function public.commit_audit_run(p_org uuid,p_invoice uuid,p_actor uuid,p_engine text,p_input text,p_hash text,p_results jsonb)
+returns uuid language plpgsql security definer set search_path = '' as $$
+declare v_run uuid; v_item jsonb; v_count integer; v_versions uuid[];
+begin
+ if not exists(select 1 from public.memberships m join public.organizations o on o.id=m.org_id
+  where m.org_id=p_org and m.user_id=p_actor and m.status='active' and o.status='active' and m.role in ('owner','admin','analyst'))
+ then raise exception 'Forbidden'; end if;
+ if p_engine <> '1.0.0' or p_hash !~ '^[0-9a-f]{64}$' or
+  encode(digest(convert_to(p_input,'UTF8'),'sha256'),'hex') <> p_hash or
+  jsonb_typeof(p_results)<>'array' or jsonb_array_length(p_results) not between 1 and 1000
+ then raise exception 'Invalid audit payload'; end if;
+ perform 1 from public.invoices where org_id=p_org and id=p_invoice for update;
+ if not found then raise exception 'Invoice unavailable'; end if;
+ select count(*) into v_count from public.invoice_lines where org_id=p_org and invoice_id=p_invoice;
+ if v_count<>jsonb_array_length(p_results) then raise exception 'Incomplete audit'; end if;
+ select array_agg(distinct (r->>'contractVersionId')::uuid) into v_versions
+ from jsonb_array_elements(p_results) r where r->>'contractVersionId' is not null;
+ if exists(select 1 from unnest(coalesce(v_versions,'{}'::uuid[])) id
+  where not exists(select 1 from public.contract_versions c where c.org_id=p_org and c.id=id and c.state='approved'))
+ then raise exception 'Unapproved contract'; end if;
+ insert into public.audit_runs(org_id,invoice_id,created_by,engine_version,input_snapshot,input_sha256,contract_version_ids,state,finished_at)
+ values(p_org,p_invoice,p_actor,p_engine,p_input::jsonb,p_hash,coalesce(v_versions,'{}'::uuid[]),'completed',now())
+ on conflict(org_id,invoice_id,input_sha256) do nothing returning id into v_run;
+ if v_run is null then
+  select id into v_run from public.audit_runs where org_id=p_org and invoice_id=p_invoice and input_sha256=p_hash;
+  return v_run;
+ end if;
+ for v_item in select value from jsonb_array_elements(p_results) loop
+  if not exists(select 1 from public.invoice_lines l where l.org_id=p_org and l.invoice_id=p_invoice
+   and l.id=(v_item->>'lineId')::uuid and l.billed_minor=(v_item->>'billedMinor')::bigint)
+   or (v_item->>'status') not in ('OK','DISCREPANCY_REVIEW','MISSING_DATA','UNSUPPORTED_RULE','PARSER_REVIEW','ERROR')
+  then raise exception 'Invalid audit line'; end if;
+  insert into public.audit_results(org_id,run_id,invoice_id,invoice_line_id,contract_version_id,rate_rule_id,
+   status,billed_minor,expected_minor,difference_minor,calculation_trace,evidence_refs)
+  values(p_org,v_run,p_invoice,(v_item->>'lineId')::uuid,(v_item->>'contractVersionId')::uuid,(v_item->>'ruleId')::uuid,
+   v_item->>'status',(v_item->>'billedMinor')::bigint,(v_item->>'expectedMinor')::bigint,(v_item->>'differenceMinor')::bigint,
+   jsonb_build_object('formula',v_item->>'formula','reason',v_item->>'reason','engineVersion',p_engine),coalesce(v_item->'sources','[]'::jsonb));
+ end loop;
+ insert into public.audit_events(org_id,actor_id,action,entity_type,entity_id,details)
+ values(p_org,p_actor,'audit_committed','audit_run',v_run,jsonb_build_object('input_sha256',p_hash,'engine',p_engine));
+ return v_run;
+end; $$;
+revoke all on function public.commit_audit_run(uuid,uuid,uuid,text,text,text,jsonb) from public,anon,authenticated;
+grant execute on function public.commit_audit_run(uuid,uuid,uuid,text,text,text,jsonb) to service_role;
+
+create function app_private.guard_audit_history() returns trigger language plpgsql set search_path = '' as $$
+begin raise exception 'Published audit history is immutable'; end; $$;
+create trigger guard_audit_runs before update or delete on public.audit_runs for each row execute function app_private.guard_audit_history();
+create trigger guard_audit_results before update or delete on public.audit_results for each row execute function app_private.guard_audit_history();
+create index jobs_ready on public.jobs(org_id,next_attempt_at,created_at) where state in ('queued','retry');
+create index jobs_expired on public.jobs(org_id,lease_until) where state='leased';

@@ -1,10 +1,12 @@
 import { cookies } from "next/headers";
 import { Empty } from "@/components/app/shell";
-import { db } from "@/lib/supabase/rest";
+import { currentUser, db } from "@/lib/supabase/rest";
 import { WorkspaceForm } from "@/components/app/workspace-form";
 export default async function Dashboard() {
+  const user = await currentUser();
+  if (!user) return <Empty title="Kirjaudu sisään" text="Istunto ei ole käytettävissä." />;
   let memberships: { org_id: string; organizations: { name: string } }[] = [];
-  try { memberships = await db("memberships?select=org_id,organizations(name)&status=eq.active"); } catch { return <Empty title="Tietokantayhteys puuttuu" text="Sovelluksen migraatio ja ympäristömuuttujat on otettava käyttöön." />; }
+  try { memberships = await db(`memberships?select=org_id,organizations(name)&user_id=eq.${user.id}&status=eq.active`); } catch { return <Empty title="Tietokantayhteys puuttuu" text="Sovelluksen migraatio ja ympäristömuuttujat on otettava käyttöön." />; }
   const choice = (await cookies()).get("elarventis-org")?.value;
   const org = memberships.find(m => m.org_id === choice) || memberships[0];
   if (!org) return <div className="workspace-stack"><div><p className="workspace-kicker">ALOITA TÄSTÄ</p><h1>Luo yrityksen työtila</h1><p>Työtila pitää yrityksen sopimukset ja dokumentit erillään muista yrityksistä.</p></div><WorkspaceForm /></div>;

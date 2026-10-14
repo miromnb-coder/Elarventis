@@ -1,6 +1,6 @@
+import { zipEntry } from "./zip-fixture.mjs";
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
-import { deflateRawSync } from "node:zlib";
 import { parseInvoice } from "../src/lib/invoices/parse.ts";
 const head = "INV-1;13.10.2026;EUR;105,00\nlahetys;palvelu;palvelupaiva;veloitus;summa_eur;alv;paino_g;vyohyke\n";
 const row = "S1;PACK;12.10.2026;base_freight;105,00;ei_sisalla;500;1\n";
@@ -15,12 +15,6 @@ test("CSV rejects broken date and amount", () => {
   assert.throws(() => parseInvoice(Buffer.from(head + row.replace("12.10.2026", "31.02.2026")), "invoice.csv", "doc1"));
   assert.throws(() => parseInvoice(Buffer.from(head + row.replace("105,00", "105,001")), "invoice.csv", "doc1"));
 });
-function zipEntry(name, content) {
-  const raw = Buffer.from(content); const packed = deflateRawSync(raw); const filename = Buffer.from(name); const header = Buffer.alloc(30);
-  header.writeUInt32LE(0x04034b50, 0); header.writeUInt16LE(20, 4); header.writeUInt16LE(8, 8);
-  header.writeUInt32LE(packed.length, 18); header.writeUInt32LE(raw.length, 22); header.writeUInt16LE(filename.length, 26);
-  return Buffer.concat([header, filename, packed]);
-}
 test("limited XLSX invoice format", () => {
   const cells = (values, row) => values.map((value, i) => `<c r="${String.fromCharCode(65 + i)}${row}" t="inlineStr"><is><t>${value}</t></is></c>`).join("");
   const xml = `<worksheet><sheetData><row r="1">${cells(head.split("\n")[0].split(";"), 1)}</row><row r="2">${cells(head.split("\n")[1].split(";"), 2)}</row><row r="3">${cells(row.trim().split(";"), 3)}</row></sheetData></worksheet>`;

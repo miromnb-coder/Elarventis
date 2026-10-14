@@ -1,11 +1,13 @@
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { ContractDetail } from "@/components/app/contract-detail";
-import { db } from "@/lib/supabase/rest";
+import { currentUser, db } from "@/lib/supabase/rest";
 export default async function ContractPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
-  const memberships = await db<{ org_id: string; role: string }[]>("memberships?select=org_id,role&status=eq.active");
+  const user = await currentUser();
+  if (!user) notFound();
+  const memberships = await db<{ org_id: string; role: string }[]>(`memberships?select=org_id,role&user_id=eq.${user.id}&status=eq.active`);
   const choice = (await cookies()).get("elarventis-org")?.value;
   const member = memberships.find(m => m.org_id === choice) || memberships[0];
   if (!member) notFound();

@@ -5,6 +5,7 @@ export type UploadPorts = {
   retry(id: string): Promise<void>;
   head(path: string): Promise<boolean>;
   upload(path: string): Promise<void>;
+  remove?(path: string): Promise<void>;
   finish(id: string): Promise<void>;
   fail(id: string): Promise<void>;
 };
@@ -29,7 +30,11 @@ export async function reconcileUpload(ports: UploadPorts, userId: string): Promi
     await ports.finish(row.id);
     return { id: row.id, reused: false };
   } catch (cause) {
-    // Never delete an object here: a timeout can hide a successful write.
+    // Only a confirmed hash mismatch may remove an unverified object. A timeout
+    // can hide a successful write, so all other failures preserve the object.
+    if (cause instanceof Error && cause.message === "Document integrity failed" && ports.remove) {
+      await ports.remove(row.storage_path).catch(() => undefined);
+    }
     const exists = await ports.head(row.storage_path).catch(() => true);
     if (!exists) await ports.fail(row.id).catch(() => undefined);
     throw cause;

@@ -1,9 +1,11 @@
 import { cookies } from "next/headers";
 import { Contracts } from "@/components/app/contracts";
 import { Empty } from "@/components/app/shell";
-import { db } from "@/lib/supabase/rest";
+import { currentUser, db } from "@/lib/supabase/rest";
 export default async function ContractsPage() {
-  const memberships = await db<{ org_id: string }[]>("memberships?select=org_id&status=eq.active");
+  const user = await currentUser();
+  if (!user) return <Empty title="Kirjaudu sisään" text="Istunto ei ole käytettävissä." />;
+  const memberships = await db<{ org_id: string }[]>(`memberships?select=org_id&user_id=eq.${user.id}&status=eq.active`);
   const choice = (await cookies()).get("elarventis-org")?.value;
   const orgId = memberships.find(m => m.org_id === choice)?.org_id || memberships[0]?.org_id;
   if (!orgId) return <Empty title="Työtila puuttuu" text="Luo ensin yrityksen työtila yleiskatsauksessa." />;
