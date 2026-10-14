@@ -23,7 +23,7 @@ const invoices:Invoice[] = [
 ];
 const eur=(n:number)=>new Intl.NumberFormat("fi-FI",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(n);
 function Status({value}:{value:Invoice["status"]}){return <span className="demo-status" data-kind={value==="Poikkeama"?"issue":value==="Kesken"?"progress":"ok"}>{value}</span>;}
-function Summary({onNavigate}:{onNavigate:(section:Section)=>void}) {
+function Summary() {
   return <div className="demo-metrics">
     {[["Kuljetuslaskut","4","Esimerkkiaineistossa"],["Tarkastettavat erot","2","Vaatii käyttäjän tarkistuksen"],["Mahdollinen ero","265 €","Ei vahvistettu säästö"],["Tarkastettu","1 / 4","Yksi lasku käsitelty"]].map(([name,value,note])=><div className="demo-stat" key={name}><span>{name}</span><strong>{value}</strong><small>{note}</small></div>)}
   </div>;
@@ -57,7 +57,7 @@ export function DemoWorkspace(){
         <nav className="demo-mobile" aria-label="Demon mobiilinavigaatio">{nav.map(x=><button key={x.id} type="button" aria-current={section===x.id?"page":undefined} onClick={()=>setSection(x.id)}>{x.label}</button>)}</nav>
         <main className="demo-main">
           <div className="demo-kicker">ELARVENTIS / ESIMERKKIYRITYS</div><h1 className="demo-title">{section==="yleiskatsaus"?"Työtilasi yhdessä näkymässä.":title}</h1><p className="demo-lead">{descriptions[section]}</p>
-          {section==="yleiskatsaus"&&<><Summary onNavigate={setSection}/><div className="demo-columns"><section className="demo-card"><h2>Viimeisimmät laskut</h2><p>Tutki yhden esimerkkilaskun vertailua valitsemalla lasku.</p>{invoiceTable(invoices)}<div className="demo-actions"><button className="demo-button" onClick={()=>setSection("laskut")}>Kaikki kuljetuslaskut →</button></div></section>{compare}</div></>}
+          {section==="yleiskatsaus"&&<><Summary/><div className="demo-columns"><section className="demo-card"><h2>Viimeisimmät laskut</h2><p>Tutki yhden esimerkkilaskun vertailua valitsemalla lasku.</p>{invoiceTable(invoices)}<div className="demo-actions"><button className="demo-button" onClick={()=>setSection("laskut")}>Kaikki kuljetuslaskut →</button></div></section>{compare}</div></>}
           {section==="laskut"&&<div className="demo-columns"><section className="demo-card"><h2>Laskut</h2><p>Valitse lasku, jotta näet sopimushinnan ja mahdollisen eron.</p><label className="demo-search"><Search size={17}/><span className="sr-only">Hae esimerkkilaskuja</span><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Hae laskua tai kuljetusliikettä"/></label>{invoiceTable(filtered)}</section>{compare}</div>}
           {section==="poikkeamat"&&<div className="demo-columns"><section className="demo-card"><h2>Tarkistettavat veloituserot</h2><p>Havainnot ovat vasta tarkistettavia, eivät hyväksyttyjä reklamaatioita.</p>{invoiceTable(invoices.filter(x=>x.status==="Poikkeama"))}</section>{compare}</div>}
           {section==="sopimukset"&&<section className="demo-card"><h2>Kuljetussopimukset</h2><p>Hyväksyttyihin sopimuksiin sidotaan voimassa olevat hinnastot.</p><ul className="demo-list"><li><span><strong>Kotimaan rahtisopimus</strong><small>Kuljetus A · voimassa 2026</small></span><span className="demo-status">Hyväksytty</span></li><li><span><strong>Jakelusopimus</strong><small>Logistiikka B · versio 2</small></span><span className="demo-status">Hyväksytty</span></li></ul><div className="demo-actions"><button className="demo-button" onClick={()=>setSection("hinnastot")}>Avaa hinnastot →</button></div></section>}
