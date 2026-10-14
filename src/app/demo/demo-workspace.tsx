@@ -37,7 +37,7 @@ export function DemoWorkspace(){
   const selectInvoice=(invoice:Invoice)=>{setChosen(invoice);setSection("laskut");};
   const invoiceTable=(rows:Invoice[])=><div className="demo-table-wrapper"><table className="demo-table"><thead><tr><th>LASKU</th><th>KULJETUSLIIKE</th><th>SUMMA</th><th>TILA</th></tr></thead><tbody>{rows.map(x=><tr key={x.number} data-selected={chosen.number===x.number}><td><button onClick={()=>selectInvoice(x)} type="button" aria-label={"Näytä lasku "+x.number}>{x.number}</button></td><td>{x.carrier}</td><td>{eur(x.billed)}</td><td><Status value={x.status}/></td></tr>)}</tbody></table>{rows.length===0&&<p>Hakua vastaavaa laskua ei löytynyt.</p>}</div>;
   const compare=<section className="demo-card"><h2>Hintavertailu</h2><p>{chosen.number} · {chosen.carrier} · {chosen.date}</p><div className="demo-compare"><div><span>Laskutettu</span><strong>{eur(chosen.billed)}</strong></div><div><span>Sopimushinta</span><strong>{eur(chosen.expected)}</strong></div><div><span>Mahdollinen ero</span><strong>{eur(Math.max(0,chosen.billed-chosen.expected))}</strong></div></div><div className="demo-note"><strong>{chosen.status==="Poikkeama"?"Tarkistettava havainto":chosen.status==="Kesken"?"Käsittely kesken":"Ei poikkeamaa"}</strong><div>{chosen.reason}</div></div><div className="demo-actions"><button className="demo-button secondary" type="button" onClick={()=>setSection("poikkeamat")}>Näytä poikkeamat</button></div></section>;
-  let title=active.label;
+  const title=active.label;
   const descriptions:Record<Section,string>={
     yleiskatsaus:"Tarkastusten kokonaistilanne ja seuraavat käsiteltävät laskut.",
     laskut:"Vertaa esimerkkilaskuja hyväksyttyihin sopimushintoihin.",
