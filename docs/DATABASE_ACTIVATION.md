@@ -25,3 +25,16 @@ Jos migraatio epäonnistuu tai synteettiset testit paljastavat kriittisen virhee
 ## Päivitys 14.10.2026
 
 Foundation-migraatioon lisättiin dokumentin palvelinvarmennus, tarkastusajon atominen tallennus ja lease-token. Se on edelleen **ajamatta**. Organisaation palvelutaso on Supabase Free: hallittua päivittäistä tietokantavarmuuskopiota ei ole käytettävissä Free-projekteille. Valmistele oma looginen dump ja erillinen Storage-objektien kopio, kokeile palautus kontrolloidusti ja varmista niiden tarkistussummat. Suoria RLS/Storage-kokeita ei tehty, koska projektin skeema on edelleen tyhjä. Katso [MVP-valmius](ELARVENTIS_MVP_READINESS.md).
+
+
+## Toteutunut aktivointi — 14.10.2026
+
+**Foundation-migraatio suoritettiin Frankfurtin Supabase-projektiin** `ktaoqivtuzcitxjfyyys` käyttäjän nimenomaisen käyttöönottopyynnön perusteella. Supabasen `apply_migration` palautti `success: true` ja migraatioluettelo näyttää version **`20261014074833`** nimellä **`foundation`**. Suoritettu SQL luettiin GitHubin `main`-haarasta, tiedostosta `supabase/migrations/20261013120000_foundation.sql` (Git-blob `0455ef4bf64cfd7516e0b8ce2897b70cbe208be4`). Lähdetiedoston päiväys ja Supabasen tallentama migraatioversio eivät ole sama asia.
+
+Käyttöönoton jälkitarkistus: **20 public-taulua**, kaikissa RLS käytössä, **37 public-RLS-politiikkaa**, yksityinen `elarventis-documents`-bucket, **0 Auth-käyttäjää ja 0 Storage-objektia**. Kaikkien sovellustaulujen rivimäärä oli 0. `verify_document`, `commit_audit_run`, `claim_invoice_job` ja `finish_invoice_job` eivät myönnä EXECUTE-oikeutta `authenticated`-roolille; ensimmäiset kaksi ovat `service_role`-roolin käytettävissä. Näiden funktioiden varsinaista liiketoimintatoimintaa ei ole vielä testattu.
+
+Vercelin `elarventis`-projektiin asetettiin production-ympäristöön `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` ja **`ELARVENTIS_MVP_ENABLED=disabled`**. Uusi GitHubin `main`-commitista `204f72d52b9949d6dcdc668daf935c63ca575fb5` käynnistetty Vercel-tuotantobuild `dpl_8dD2L78pD3GvaXtsT6fsiMdPsMcx` saavutti tilan READY. HTTP/E2E-käytöstä ei saatu vahvistusta. Palvelimen `ELARVENTIS_SERVICE_ROLE_KEY`-avainta ei lisätty.
+
+**Avoin riski:** Supabase Free -projektin tietokanta- ja Storage-palautusharjoitusta ei suoritettu ennen ensimmäistä migraatiota; se on edelleen tehtävä ennen oikean asiakasdatan käyttöä. Security Advisor ilmoitti `btree_gist`-laajennuksesta public-skeemassa ja 11 käyttäjille suoritettavaksi tarkoitettua SECURITY DEFINER -funktiota, jotka on katselmoitava. Performance Advisor ilmoitti myös puuttuvia FK-indeksejä ja RLS-suorituskykyhuomioita. Kumpaakaan varoitusluokkaa ei pidä tulkita automaattiseksi tietoturva-aukoksi eikä ongelmien korjautumista ole varmistettu.
+
+Seuraavat pakolliset testit: kahden organisaation suorat RLS/RPC/Storage-kokeet, dokumentin tavusisällön ja auditin tallennuksen integraatiot, kirjautuminen ja koko laskuntarkastuksen E2E. Työtilaportti pidetään suljettuna eikä todellista asiakasdataa tuoda ennen näiden ja palautussuunnitelman varmennusta.
